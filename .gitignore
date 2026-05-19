@@ -1,0 +1,26 @@
+# Environment / secrets
+.env
+*.env
+
+# Database / runtime data
+backend/data/
+backend/shiftsync.db
+*.db
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+dist/
+
+# Deploy patch scripts (server-specific, contain hardcoded usernames)
+deploy_*.sh
+deply_*.sh
+fix_*.sh
+check-lucas.js
+
+# Logs / misc
+*.log
+.DS_Store

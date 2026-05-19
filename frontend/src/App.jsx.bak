@@ -1,0 +1,78 @@
+import React, { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from "./hooks/useAuth";
+import Sidebar from "./components/Sidebar";
+import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
+import CalendarPage from "./pages/CalendarPage";
+import ScheduleManager from "./pages/ScheduleManager";
+import SwapRequests from "./pages/SwapRequests";
+import GroupsManager from "./pages/GroupsManager";
+import UsersManager from "./pages/UsersManager";
+import Reports from "./pages/Reports";
+
+const GLOBAL_STYLES = `
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(12px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .fade-up { animation: fadeUp 0.35s ease forwards; }
+`;
+
+function AppContent() {
+  const { user, loading } = useAuth();
+  const [active, setActive] = useState("dashboard");
+
+  // Funcionário só vê calendário e trocas
+  useEffect(() => {
+    if (user?.role === "employee") {
+      setActive((a) => (["calendar","swaps"].includes(a) ? a : "calendar"));
+    }
+  }, [user?.role]);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#080C10" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ width: 40, height: 40, border: "3px solid #1A2A40", borderTopColor: "#00C2FF", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 16px" }} />
+          <div style={{ color: "#3A5A7A", fontSize: 13 }}>Carregando...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return <LoginPage />;
+
+  const renderPage = () => {
+    switch (active) {
+      case "dashboard":  return <Dashboard />;
+      case "calendar":   return <CalendarPage />;
+      case "schedule":   return <ScheduleManager />;
+      case "swaps":      return <SwapRequests />;
+      case "groups":     return <GroupsManager />;
+      case "users":      return <UsersManager />;
+      case "reports":    return <Reports />;
+      default:           return <Dashboard />;
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", fontFamily: "'Sora',sans-serif" }}>
+      <Sidebar active={active} setActive={setActive} />
+      <main className="fade-up" key={active} style={{ flex: 1, overflowY: "auto", background: "#080C10" }}>
+        {renderPage()}
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <style>{GLOBAL_STYLES}</style>
+      <AppContent />
+    </AuthProvider>
+  );
+}

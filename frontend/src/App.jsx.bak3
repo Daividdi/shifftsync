@@ -1,0 +1,90 @@
+import React, { useState, useEffect } from "react";
+import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import Sidebar from "./components/Sidebar";
+import LoginPage from "./pages/LoginPage";
+import Dashboard from "./pages/Dashboard";
+import CalendarPage from "./pages/CalendarPage";
+import ScheduleManager from "./pages/ScheduleManager";
+import SwapRequests from "./pages/SwapRequests";
+import GroupsManager from "./pages/GroupsManager";
+import UsersManager from "./pages/UsersManager";
+import Reports from "./pages/Reports";
+import AbsenceControl from "./pages/AbsenceControlNew";
+import MeetingRoom from "./pages/MeetingRoom";
+import OccurrencesPage from "./pages/OccurrencesPage";
+import HolidaysManager from "./pages/HolidaysManager";
+import BirthdaysPage from "./pages/BirthdaysPage";
+import PontoPage from "./pages/PontoPage";
+import BatidasPage from "./pages/BatidasPage";
+import VacationsPage from "./pages/VacationsPage";
+import AbsenceAlert from "./components/AbsenceAlert";
+
+const S = ["@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');","* { box-sizing: border-box; } body { font-family: 'Sora', sans-serif; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }",".mono { font-family: 'JetBrains Mono', monospace; }","h1,h2,h3 { text-wrap: balance; }","p { text-wrap: pretty; }","button:not([disabled]) { transition-property: transform; transition-duration: 150ms; transition-timing-function: ease-out; }","button:not([disabled]):active { transform: scale(0.96); }","@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }","@keyframes spin { to { transform: rotate(360deg); } }",".fade-up { animation: fadeUp 0.35s ease forwards; }"].join("\n");
+
+function AppContent() {
+  const { user, loading } = useAuth();
+  const { theme: T } = useTheme();
+  const [active, setActive] = useState("dashboard");
+
+  useEffect(() => {
+    if (user?.role==="employee") setActive(a=>["calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto"].includes(a)?a:"calendar");
+  }, [user?.role]);
+
+  if (loading) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:T.bgApp}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{width:40,height:40,border:"3px solid "+T.border,borderTopColor:T.accent,borderRadius:"50%",animation:"spin 0.7s linear infinite",margin:"0 auto 16px"}}/>
+        <div style={{color:T.t9,fontSize:13}}>Carregando...</div>
+      </div>
+    </div>
+  );
+
+  if (!user) return <LoginPage/>;
+
+  const EMPLOYEE_PAGES = new Set(["calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto"]);
+
+  const renderPage = () => {
+    const isEmployee = user?.role === "employee";
+    const safePage = isEmployee && !EMPLOYEE_PAGES.has(active) ? "calendar" : active;
+    switch(safePage) {
+      case "dashboard":   return <Dashboard/>;
+      case "calendar":    return <CalendarPage/>;
+      case "schedule":    return <ScheduleManager/>;
+      case "swaps":       return <SwapRequests/>;
+      case "groups":      return <GroupsManager/>;
+      case "users":       return <UsersManager/>;
+      case "reports":     return <Reports/>;
+      case "absences":    return <AbsenceControl/>;
+      case "meeting":     return <MeetingRoom/>;
+      case "occurrences": return <OccurrencesPage/>;
+      case "holidays":    return <HolidaysManager/>;
+      case "birthdays":   return <BirthdaysPage/>;
+      case "ponto":       return <PontoPage/>;
+      case "vacations":   return <VacationsPage/>;
+      case "batidas":     return <BatidasPage/>;
+      default:            return <CalendarPage/>;
+    }
+  };
+
+  return (
+    <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
+      <AbsenceAlert onNavigate={setActive}/>
+      <Sidebar active={active} setActive={setActive}/>
+      <main className="fade-up" key={active} style={{flex:1,overflowY:"auto",background:T.bgApp}}>
+        {renderPage()}
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <style>{S}</style>
+        <AppContent/>
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}

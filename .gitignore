@@ -24,3 +24,4 @@ check-lucas.js
 # Logs / misc
 *.log
 .DS_Store
+*.bak*

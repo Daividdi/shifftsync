@@ -416,7 +416,7 @@ function Preset({ label, active, onClick, T }) {
       padding: "5px 12px", borderRadius: 20, border: `1px solid ${active ? T.accent : T.border}`,
       background: active ? T.accent + "22" : "transparent", color: active ? T.accent : T.t5,
       cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 400, fontFamily: "'Sora',sans-serif",
-      transition: "all 0.1s",
+      transition: "background 0.1s, color 0.1s, border-color 0.1s",
     }}>{label}</button>
   );
 }
@@ -435,6 +435,8 @@ export default function BatidasPage() {
   const [mode,          setMode]          = useState("cached");
   const [dateFrom,      setDateFrom]      = useState(weekAgo);
   const [dateTo,        setDateTo]        = useState(today);
+  const [queryFrom,     setQueryFrom]     = useState(weekAgo);
+  const [queryTo,       setQueryTo]       = useState(today);
   const [preset,        setPreset]        = useState("week");
   const [days,          setDays]          = useState([]);
   const [nameFilter,    setNameFilter]    = useState("");
@@ -470,15 +472,25 @@ export default function BatidasPage() {
         return [fmt(s), fmt(e)];
       })(),
     };
-    if (map[p]) { setDateFrom(map[p][0]); setDateTo(map[p][1]); setPreset(p); }
+    if (map[p]) { setDateFrom(map[p][0]); setDateTo(map[p][1]); setQueryFrom(map[p][0]); setQueryTo(map[p][1]); setPreset(p); }
   }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQueryFrom(dateFrom), 400);
+    return () => clearTimeout(t);
+  }, [dateFrom]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQueryTo(dateTo), 400);
+    return () => clearTimeout(t);
+  }, [dateTo]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) { setLoading(true); setError(null); }
     try {
       const url = mode === "live"
         ? "/batidas/live"
-        : `/batidas?dateFrom=${dateFrom}&dateTo=${dateTo}`;
+        : `/batidas?dateFrom=${queryFrom}&dateTo=${queryTo}`;
       const { data } = await api.get(url);
       setDays(data.sort((a, b) => b.date?.localeCompare(a.date) || (a.fullName||"").localeCompare(b.fullName||"")));
     } catch (e) {
@@ -486,7 +498,7 @@ export default function BatidasPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [mode, dateFrom, dateTo]);
+  }, [mode, queryFrom, queryTo]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!isLeader) return; api.get("/batidas/alerta-esquecidos").then(r => setEsquecidos(r.data||[])).catch(()=>{}); }, [isLeader]);
@@ -685,6 +697,7 @@ export default function BatidasPage() {
           <option value="completo">✓ Completos</option>
           <option value="incompleto">⚠ Incompletos</option>
           <option value="trabalhando">● Trabalhando</option>
+          <option value="sem_batida">○ Sem batida</option>
         </select>
 
         {activeFilters > 0 && (
@@ -723,7 +736,7 @@ export default function BatidasPage() {
       )}
       {!loading && filteredDays.map((day) => (
         <UserDayCard
-          key={day.date + (day.fullName||"")}
+          key={(day.userId||"") + "__" + day.date}
           day={day} T={T}
           showName={isLeader}
           canEdit={isLeader}

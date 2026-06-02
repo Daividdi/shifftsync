@@ -3,7 +3,7 @@ import {
   Layers, Calendar, ArrowLeftRight, Users, UserCheck,
   BarChart3, Clock, LogOut, GitBranch, Timer, Scale,
   ChevronDown, ChevronRight, DoorOpen, CalendarDays, FileText, Cake, Fingerprint, Umbrella,
-  Newspaper, FolderOpen,
+  Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
 } from "lucide-react";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
@@ -20,7 +20,7 @@ function ThemeToggle({ isDark, onToggle, T }) {
     <button onClick={onToggle} style={{
       display: "flex", alignItems: "center", gap: 0, width: "100%",
       padding: "6px 8px", background: T.bgDeep, border: `1px solid ${T.border}`,
-      borderRadius: 20, cursor: "pointer", transition: "all 0.3s",
+      borderRadius: 20, cursor: "pointer", transition: "background 0.3s, border-color 0.3s",
       position: "relative", overflow: "hidden",
     }}>
       {/* Track */}
@@ -63,7 +63,7 @@ function NavGroup({ label, icon, children, defaultOpen = true, T }) {
       <button onClick={() => setOpen(v => !v)} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
         padding: "5px 10px", background: "transparent", border: "none",
-        cursor: "pointer", color: T.t10, fontSize: 10,
+        cursor: "pointer", color: T.t5, fontSize: 10,
         fontWeight: 700, letterSpacing: "0.1em",
         fontFamily: "'Sora', sans-serif", textTransform: "uppercase",
         justifyContent: "space-between",
@@ -96,14 +96,14 @@ function NavItem({ id, label, icon, active, setActive, T, badge }) {
         background: isActive
           ? `linear-gradient(90deg, ${T.accent}22 0%, ${T.accent}08 100%)`
           : hovered ? T.bgSelected : "transparent",
-        color: isActive ? T.accent : hovered ? T.t3 : T.t7,
+        color: isActive ? T.accent : hovered ? T.t3 : T.t4,
         fontSize: 12.5, fontWeight: isActive ? 700 : 400,
-        marginBottom: 1, textAlign: "left", transition: "all 0.12s",
+        marginBottom: 1, textAlign: "left", transition: "background 0.12s, color 0.12s, border-color 0.12s",
         fontFamily: "'Sora', sans-serif",
         borderLeft: isActive ? `3px solid ${T.accent}` : "3px solid transparent",
         paddingLeft: isActive ? 8 : 10,
       }}>
-      <span style={{ opacity: isActive ? 1 : hovered ? 0.9 : 0.65, flexShrink: 0, transition: "opacity 0.12s" }}>{icon}</span>
+      <span style={{ opacity: isActive ? 1 : hovered ? 0.9 : 0.8, flexShrink: 0, transition: "opacity 0.12s" }}>{icon}</span>
       <span style={{ flex: 1 }}>{label}</span>
       {badge && (
         <span style={{
@@ -182,11 +182,16 @@ export default function Sidebar({ active, setActive }) {
           <NavItem id="birthdays" label="Aniversários"
             icon={<Cake size={15}/>} active={active} setActive={setActive} T={T} />
           <NotificationBell T={T} setActive={setActive} />
+          <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
         </NavGroup>
+
+        {/* Plataformas — todos veem */}
+        <NavItem id="plataformas" label="Plataformas" icon={<Zap size={15} />} active={active} setActive={setActive} T={T} />
 
         {/* Comunicação — todos veem */}
         <NavGroup label="Comunicação" T={T} defaultOpen={true}>
-          <NavItem id="mural"     label="Mural de Avisos" icon={<Newspaper  size={15} />} active={active} setActive={setActive} T={T} />
+          <NavItem id="mural"     label="Mural de Avisos" icon={<Newspaper     size={15} />} active={active} setActive={setActive} T={T} />
+          <NavItem id="forms"     label="Formulários"     icon={<ClipboardList size={15} />} active={active} setActive={setActive} T={T} />
           <NavItem id="documents" label="Documentos"      icon={<FolderOpen size={15} />} active={active} setActive={setActive} T={T} />
         </NavGroup>
 
@@ -241,17 +246,13 @@ export default function Sidebar({ active, setActive }) {
           <NavItem id="vacations" label="Controle de Férias" icon={<Umbrella size={15} />} active={active} setActive={setActive} T={T} />
         </NavGroup>
 
-        {/* Análise — líder e acima */}
+        {/* Gestão — líder e acima */}
         {(isLeader || isHR) && (
-          <NavGroup label="Análise" T={T} defaultOpen={true}>
-            <NavItem id="reports" label="Relatórios" icon={<BarChart3 size={15} />} active={active} setActive={setActive} T={T} />
-          </NavGroup>
-        )}
-
-        {/* Gestão — HR/TI vê tudo; gerencia vê apenas Grupos */}
-        {(isHR || user?.role === "gerencia") && (
           <NavGroup label="Gestão" T={T} defaultOpen={false}>
-            <NavItem id="groups" label="Grupos & Times"  icon={<Users size={15} />}     active={active} setActive={setActive} T={T} />
+            <NavItem id="reports" label="Relatórios" icon={<BarChart3 size={15} />} active={active} setActive={setActive} T={T} />
+            {(isHR || user?.role === "gerencia") && (
+              <NavItem id="groups" label="Grupos & Times"  icon={<Users size={15} />}     active={active} setActive={setActive} T={T} />
+            )}
             {isHR && <NavItem id="users"  label="Usuários (LDAP)" icon={<UserCheck size={15} />} active={active} setActive={setActive} T={T} />}
           </NavGroup>
         )}
@@ -279,7 +280,7 @@ export default function Sidebar({ active, setActive }) {
           display: "flex", alignItems: "center", gap: 8, width: "100%",
           padding: "7px 10px", background: "#FF445512", border: "1px solid #FF445530",
           borderRadius: 7, color: "#FF7A7A", cursor: "pointer",
-          fontSize: 12, fontWeight: 600, fontFamily: "'Sora', sans-serif", transition: "all 0.15s",
+          fontSize: 12, fontWeight: 600, fontFamily: "'Sora', sans-serif", transition: "background 0.15s, color 0.15s, border-color 0.15s",
         }}>
           <LogOut size={13} /> Sair
         </button>

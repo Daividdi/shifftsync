@@ -489,7 +489,7 @@ export default function AbsenceControl() {
 
       <div style={{display:"flex",gap:4,marginBottom:20,background:T.bgDeep,borderRadius:10,padding:4,width:"fit-content",border:`1px solid ${T.border}`}}>
         {tabs.map(t=>(
-          <button key={t.id} onClick={()=>{ setActiveTab(t.id); fetchHistory(t.id); }} style={{padding:"7px 20px",borderRadius:8,border:"none",cursor:"pointer",background:activeTab===t.id?T.bgCard:"transparent",color:activeTab===t.id?T.t1:T.t8,fontSize:13,fontWeight:activeTab===t.id?600:400,fontFamily:"'Sora',sans-serif",boxShadow:activeTab===t.id?"0 1px 6px #00000022":"none",transition:"all 0.15s"}}>
+          <button key={t.id} onClick={()=>{ setActiveTab(t.id); fetchHistory(t.id); }} style={{padding:"7px 20px",borderRadius:8,border:"none",cursor:"pointer",background:activeTab===t.id?T.bgCard:"transparent",color:activeTab===t.id?T.t1:T.t8,fontSize:13,fontWeight:activeTab===t.id?600:400,fontFamily:"'Sora',sans-serif",boxShadow:activeTab===t.id?"0 1px 6px #00000022":"none",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>
             {t.label}
           </button>
         ))}

@@ -32,6 +32,7 @@ export const Card = ({ children, style = {}, className = "" }) => {
     <div className={className} style={{
       background: T.bgCard, border: `1px solid ${T.border}`,
       borderRadius: 12, padding: 20,
+      boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.08)",
       transition: "background 0.25s, border-color 0.25s",
       ...style,
     }}>{children}</div>
@@ -65,7 +66,7 @@ export const Input = ({ value, onChange, placeholder, icon, type = "text", style
   return (
     <div style={{ position: "relative" }}>
       {icon && (
-        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.t10, pointerEvents: "none" }}>
+        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: T.t5, pointerEvents: "none" }}>
           {icon}
         </span>
       )}
@@ -132,11 +133,14 @@ export const Modal = ({ open, onClose, title, children, width = 500 }) => {
         background: T.bgCard, border: `1px solid ${T.border}`,
         borderRadius: 16, width: "100%", maxWidth: width,
         maxHeight: "90vh", overflowY: "auto", padding: 28,
+        boxShadow: "0 24px 80px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.04)",
         animation: "fadeUp 0.25s ease",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: T.t1 }}>{title}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: T.t8, cursor: "pointer", fontSize: 18 }}>✕</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.t5, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, borderRadius: 6, flexShrink: 0, transition: "background 0.12s, color 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = T.t2; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = T.t5; }}>✕</button>
         </div>
         {children}
       </div>
@@ -172,7 +176,7 @@ export const Toast = ({ message, type = "success", onClose }) => {
       animation: "fadeUp 0.3s ease",
     }}>
       <span style={{ color: colors[type], fontSize: 13, fontWeight: 600 }}>{message}</span>
-      {onClose && <button onClick={onClose} style={{ background: "none", border: "none", color: T.t9, cursor: "pointer" }}>✕</button>}
+      {onClose && <button onClick={onClose} style={{ background: "none", border: "none", color: T.t5, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, flexShrink: 0, padding: 0 }}>✕</button>}
     </div>
   );
 };

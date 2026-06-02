@@ -335,7 +335,7 @@ export default function OccurrencesPage() {
             padding:"9px 20px", background:"none", border:"none", cursor:"pointer",
             fontSize:13, fontWeight:tab===t.id?700:400, color:tab===t.id?T.accent:T.t7,
             borderBottom:`2px solid ${tab===t.id?T.accent:"transparent"}`,
-            fontFamily:"'Sora',sans-serif", transition:"all 0.15s",
+            fontFamily:"'Sora',sans-serif", transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
           }}>{t.label}</button>
         ))}
       </div>
@@ -554,7 +554,7 @@ export default function OccurrencesPage() {
                         <div onClick={()=>setAFrm("punchType",pt)} style={{
                           width:20, height:20, borderRadius:"50%", border:`2px solid ${abonoForm.punchType===pt?T.accent:T.border}`,
                           background:abonoForm.punchType===pt?T.accent:"transparent",
-                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s",
+                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
                         }}>
                           {abonoForm.punchType===pt && <div style={{width:8, height:8, borderRadius:"50%", background:"#fff"}}/>}
                         </div>
@@ -734,7 +734,7 @@ export default function OccurrencesPage() {
                         <div onClick={()=>setFFrm("expectedType",k)} style={{
                           width:18, height:18, borderRadius:"50%", border:`2px solid ${faltaForm.expectedType===k?T.accent:T.border}`,
                           background:faltaForm.expectedType===k?T.accent:"transparent",
-                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"all 0.15s",
+                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
                         }}>
                           {faltaForm.expectedType===k && <div style={{width:7, height:7, borderRadius:"50%", background:"#fff"}}/>}
                         </div>

@@ -445,7 +445,7 @@ export default function MeetingRoom() {
         </div>
         <div style={{display:"flex",gap:4,background:T.bgDeep,padding:3,borderRadius:8,border:`1px solid ${T.border}`}}>
           {[["week","Semana",<Calendar size={13}/>],["day","Dia",<Clock size={13}/>],["list","Lista",<List size={13}/>]].map(([v,l,ic])=>(
-            <button key={v} onClick={()=>setView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",background:view===v?T.bgCard:"transparent",color:view===v?T.t1:T.t8,fontSize:12,fontWeight:view===v?600:400,fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:5,boxShadow:view===v?"0 1px 4px #00000022":"none",transition:"all 0.15s"}}>
+            <button key={v} onClick={()=>setView(v)} style={{padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",background:view===v?T.bgCard:"transparent",color:view===v?T.t1:T.t8,fontSize:12,fontWeight:view===v?600:400,fontFamily:"'Sora',sans-serif",display:"flex",alignItems:"center",gap:5,boxShadow:view===v?"0 1px 4px #00000022":"none",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>
               {ic}{l}
             </button>
           ))}

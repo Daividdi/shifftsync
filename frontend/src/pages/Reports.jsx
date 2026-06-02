@@ -8,6 +8,7 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend, Area, ComposedChart, ReferenceLine,
 } from "recharts";
 import api from "../api/client";
+import FormsReport from "./FormsReport";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -279,6 +280,7 @@ const TABS = [
   { id:"users",        label:"Funcionários" },
   { id:"ponto",        label:"Ponto" },
   { id:"ferias",       label:"Férias" },
+  { id:"forms",       label:"Formulários" },
 ];
 
 export default function Reports() {
@@ -454,11 +456,11 @@ export default function Reports() {
   );
 
   const TabBtn = ({id,label}) => (
-    <button onClick={()=>setTab(id)} style={{padding:"7px 20px",borderRadius:8,border:"none",cursor:"pointer",background:tab===id?T.bgCard:"transparent",color:tab===id?T.t1:T.t8,fontSize:13,fontWeight:tab===id?600:400,fontFamily:"'Sora',sans-serif",boxShadow:tab===id?"0 1px 6px #00000022":"none",transition:"all 0.15s"}}>{label}</button>
+    <button onClick={()=>setTab(id)} style={{padding:"7px 20px",borderRadius:8,border:"none",cursor:"pointer",background:tab===id?T.bgCard:"transparent",color:tab===id?T.t1:T.t8,fontSize:13,fontWeight:tab===id?600:400,fontFamily:"'Sora',sans-serif",boxShadow:tab===id?"0 1px 6px #00000022":"none",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>{label}</button>
   );
 
   const AbTabBtn = ({id,label}) => (
-    <button onClick={()=>setAbTab(id)} style={{padding:"5px 14px",borderRadius:6,border:`1px solid ${abTab===id?T.accent:T.border}`,cursor:"pointer",background:abTab===id?T.accent+"18":"transparent",color:abTab===id?T.accent:T.t8,fontSize:12,fontWeight:abTab===id?600:400,fontFamily:"'Sora',sans-serif",transition:"all 0.15s"}}>{label}</button>
+    <button onClick={()=>setAbTab(id)} style={{padding:"5px 14px",borderRadius:6,border:`1px solid ${abTab===id?T.accent:T.border}`,cursor:"pointer",background:abTab===id?T.accent+"18":"transparent",color:abTab===id?T.accent:T.t8,fontSize:12,fontWeight:abTab===id?600:400,fontFamily:"'Sora',sans-serif",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>{label}</button>
   );
 
   // ── Heatmap helper ────────────────────────────────────────────────
@@ -1475,7 +1477,7 @@ export default function Reports() {
                 const isSelected=selectedGroup?.id===g.id;
                 return (
                   <div key={g.id} onClick={()=>setSelectedGroup(isSelected?null:g)}
-                    style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.borderRow}`,cursor:"pointer",background:isSelected?T.bgSelected:i%2===0?"transparent":T.bgRowAlt,borderLeft:isSelected?`3px solid ${g.color}`:"3px solid transparent",transition:"all 0.15s"}}>
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.borderRow}`,cursor:"pointer",background:isSelected?T.bgSelected:i%2===0?"transparent":T.bgRowAlt,borderLeft:isSelected?`3px solid ${g.color}`:"3px solid transparent",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>
                     <div style={{width:10,height:10,borderRadius:3,background:g.color,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:600,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</div>
@@ -1577,7 +1579,7 @@ export default function Reports() {
                   const isSelected=selectedUser?.id===u.id;
                   return (
                     <div key={u.id} onClick={()=>setSelectedUser(isSelected?null:u)}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.borderRow}`,cursor:"pointer",background:isSelected?T.bgSelected:i%2===0?"transparent":T.bgRowAlt,borderLeft:isSelected?`3px solid ${T.accent}`:"3px solid transparent",transition:"all 0.15s"}}>
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.borderRow}`,cursor:"pointer",background:isSelected?T.bgSelected:i%2===0?"transparent":T.bgRowAlt,borderLeft:isSelected?`3px solid ${T.accent}`:"3px solid transparent",transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s"}}>
                       <Avatar name={u.fullName} size={28} color={ug?.color||T.t9}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:12,fontWeight:600,color:isSelected?T.t1:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.fullName}</div>
@@ -2449,6 +2451,11 @@ export default function Reports() {
         </div>
       )}
 
+      {tab==="forms" && (
+        <div style={{padding:"4px 0"}}>
+          <FormsReport />
+        </div>
+      )}
 
     </div>
   );

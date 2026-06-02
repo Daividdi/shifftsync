@@ -494,8 +494,10 @@ router.get("/banco-horas", requireAuth, (req, res) => {
     const expectedMin = getEffectiveDayExpected(date, dailyExpected);
     const diffMin     = workedMin - expectedMin;
     const adjMin      = dayAdjs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
-    periodBalance += diffMin + adjMin;
-    cumulative    += diffMin + adjMin;
+    if (dayBatidas.length > 0 || dayAdjs.length > 0) {
+      periodBalance += diffMin + adjMin;
+      cumulative    += diffMin + adjMin;
+    }
     return { date, punchCount: dayBatidas.length, workedMin, expectedMin, diffMin, adjustmentMin: adjMin, adjustments: dayAdjs, cumulativeMin: cumulative };
   });
 
@@ -689,6 +691,7 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
       if (date === todayStr && (bByDate[date] || []).length % 2 === 1) continue;
       const dayBs = bByDate[date] || [];
       const dayAs = aByDate[date] || [];
+      if (dayBs.length === 0 && dayAs.length === 0) continue;
       const worked = computeWorkedMinutes(dayBs);
       const expected = effExp(date);
       const adjMin = dayAs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);

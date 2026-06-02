@@ -41,7 +41,7 @@ export default function LoginPage() {
           padding: "7px 14px", background: T.bgCard,
           border: `1px solid ${T.border}`, borderRadius: 20,
           cursor: "pointer", fontFamily: "'Sora',sans-serif",
-          color: T.t8, fontSize: 12, fontWeight: 600, transition: "all 0.2s",
+          color: T.t8, fontSize: 12, fontWeight: 600, transition: "background 0.2s, color 0.2s, opacity 0.2s",
         }}>
           {isDark
             ? <><Sun size={13} style={{ color: T.amber }} /> Modo Claro</>

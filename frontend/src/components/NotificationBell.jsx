@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Umbrella, ArrowLeftRight, CheckCheck, X, Newspaper, FileText } from "lucide-react";
+import { Bell, Umbrella, ArrowLeftRight, CheckCheck, X, Newspaper, FileText, ClipboardList } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
 
 function timeAgo(dateStr) {
@@ -14,7 +14,9 @@ function timeAgo(dateStr) {
 }
 
 const TYPE_META = {
-  mural_post:   { Icon: Newspaper, color: "#10B981", label: "Mural",     page: "mural"     },
+  mural_post:   { Icon: Newspaper,      color: "#10B981", label: "Mural",        page: "mural"  },
+  mural_comment: { Icon: Newspaper,      color: "#06B6D4", label: "Comentário",    page: "mural"  },
+  form_new:      { Icon: ClipboardList,  color: "#6366F1", label: "Formulário",    page: "forms"  },
   document_new: { Icon: FileText,  color: "#3B82F6", label: "Documento", page: "documents" },
   vacation_reminder: { Icon: Umbrella,       color: "#A78BFA", label: "Lembrete Férias", page: "vacations" },
   vacation_pending:  { Icon: Umbrella,       color: "#F59E0B", label: "Férias Pendente",  page: "vacations" },
@@ -132,7 +134,7 @@ export default function NotificationBell({ T, setActive }) {
             color: tab === id ? T.accent : T.t7,
             fontWeight: tab === id ? 700 : 400,
             borderBottom: tab === id ? `2px solid ${T.accent}` : "2px solid transparent",
-            marginBottom: -1, transition: "all 0.12s",
+            marginBottom: -1, transition: "color 0.12s, border-color 0.12s",
           }}>{label}</button>
         ))}
       </div>
@@ -248,7 +250,7 @@ export default function NotificationBell({ T, setActive }) {
             : hovered ? T.bgSelected : "transparent",
           color: open ? T.accent : hovered ? T.t3 : T.t7,
           fontSize: 12.5, fontWeight: open ? 700 : 400,
-          marginBottom: 1, textAlign: "left", transition: "all 0.12s",
+          marginBottom: 1, textAlign: "left", transition: "background 0.12s, color 0.12s, border-color 0.12s",
           fontFamily: "'Sora', sans-serif",
           borderLeft: open ? `3px solid ${T.accent}` : "3px solid transparent",
           paddingLeft: open ? 8 : 10,

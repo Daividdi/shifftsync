@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import Sidebar from "./components/Sidebar";
@@ -20,18 +20,24 @@ import BatidasPage from "./pages/BatidasPage";
 import PontoSaldoPage from "./pages/PontoSaldoPage";
 import VacationsPage from "./pages/VacationsPage";
 import MuralPage from "./pages/MuralPage";
+import FormsPage from "./pages/FormsPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import BIPage from "./pages/BIPage";
+import PlataformasPage from "./pages/PlataformasPage";
+import FocusGamePage from "./pages/FocusGamePage";
+import { GameTimerProvider } from "./context/GameTimerContext";
 import AbsenceAlert from "./components/AbsenceAlert";
 
-const S = ["* { box-sizing: border-box; } body { font-family: 'Sora', sans-serif; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }",".mono { font-family: 'JetBrains Mono', monospace; }","h1,h2,h3 { text-wrap: balance; }","p { text-wrap: pretty; }","button:not([disabled]) { transition-property: transform; transition-duration: 150ms; transition-timing-function: ease-out; }","button:not([disabled]):active { transform: scale(0.96); }","@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }","@keyframes spin { to { transform: rotate(360deg); } }",".fade-up { animation: fadeUp 0.35s ease forwards; }"].join("\n");
+const S = ["* { box-sizing: border-box; } body { font-family: 'Sora', sans-serif; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-variant-numeric: tabular-nums; }",".mono { font-family: 'JetBrains Mono', monospace; }","h1,h2,h3 { text-wrap: balance; }","p { text-wrap: pretty; }","button:not([disabled]) { transition-property: transform; transition-duration: 150ms; transition-timing-function: ease-out; }","button:not([disabled]):active { transform: scale(0.96); }","@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }","@keyframes spin { to { transform: rotate(360deg); } }",".fade-up { animation: fadeUp 0.35s ease forwards; }"].join("\n");
 
 function AppContent() {
   const { user, loading } = useAuth();
   const { theme: T, isDark } = useTheme();
   const [active, setActive] = useState("dashboard");
+  const [focusGame, setFocusGame] = useState(null);
 
-  useEffect(() => {
-    if (user?.role==="employee") setActive(a=>["calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto"].includes(a)?a:"calendar");
+  React.useEffect(() => {
+    if (user?.role==="employee") setActive(a=>["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi"].includes(a)?a:"calendar");
   }, [user?.role]);
 
   if (loading) return (
@@ -45,7 +51,12 @@ function AppContent() {
 
   if (!user) return <LoginPage/>;
 
-  const EMPLOYEE_PAGES = new Set(["calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","documents"]);
+  const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game"]);
+
+  function openGame(url, title) {
+    setFocusGame({ url, title });
+    setActive("focus-game");
+  }
 
   const renderPage = () => {
     const isEmployee = user?.role === "employee";
@@ -68,7 +79,11 @@ function AppContent() {
       case "batidas":     return <BatidasPage/>;
       case "saldo_horas": return <PontoSaldoPage/>;
       case "mural":       return <MuralPage/>;
+      case "forms":       return <FormsPage/>;
       case "documents":   return <DocumentsPage/>;
+      case "bi":          return <BIPage/>;
+      case "plataformas": return <PlataformasPage onOpenGame={openGame}/>;
+      case "focus-game":  return <FocusGamePage url={focusGame?.url} title={focusGame?.title} onBack={() => setActive("plataformas")}/>;
       default:            return <CalendarPage/>;
     }
   };
@@ -88,16 +103,18 @@ function AppContent() {
     `;
 
   return (
+    <GameTimerProvider userId={user?.id}>
     <>
     <style>{scrollbarCss}</style>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
       <AbsenceAlert onNavigate={setActive}/>
       <Sidebar active={active} setActive={setActive}/>
-      <main className="fade-up" key={active} style={{flex:1,overflowY:"auto",background:T.bgApp}}>
+      <main className={active === "focus-game" ? undefined : "fade-up"} key={active} style={{flex:1,overflow:active==="focus-game"?"hidden":"auto",background:T.bgApp,display:"flex",flexDirection:"column"}}>
         {renderPage()}
       </main>
     </div>
     </>
+    </GameTimerProvider>
   );
 }
 

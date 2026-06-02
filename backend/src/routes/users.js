@@ -177,7 +177,7 @@ router.post("/sync", requireAuth, requireRole("hr"), async (req, res) => {
     db.transaction((users) => {
       for (const u of users) {
         if (!u.username) continue;
-        upsert.run(uuidv4(), u.username, u.fullName || u.username, u.email, u.dept, u.title);
+        upsert.run(uuidv4(), u.username.toLowerCase(), u.fullName || u.username, u.email, u.dept, u.title);
       }
     })(ldapUsers);
 

@@ -26,6 +26,7 @@ services:
     depends_on:
       - backend
 
+
   nginx:
     image: nginx:alpine
     container_name: shiftsync-nginx

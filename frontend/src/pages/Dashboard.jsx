@@ -75,8 +75,8 @@ function SaturdayBanner({ user, schedule, groups, T }) {
 
   if (!satData||myStatus===null) return (
     <div style={{borderRadius:12,padding:"14px 18px",marginBottom:16,background:T.bgDeep,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:14}}>
-      <Calendar size={18} style={{color:T.t9,flexShrink:0}}/>
-      <div style={{fontSize:13,color:T.t8}}>
+      <Calendar size={18} style={{color:T.t5,flexShrink:0}}/>
+      <div style={{fontSize:13,color:T.t5}}>
         Sem escala para {nextSat.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
       </div>
     </div>
@@ -96,7 +96,7 @@ function SaturdayBanner({ user, schedule, groups, T }) {
           {isWorking?"Você trabalha":"Você folga"} {urgency}
           {(isToday||isTomorrow)&&<span style={{marginLeft:8,fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:20,background:color+"22",color,border:`1px solid ${color}44`}}>{isToday?"HOJE":"AMANHÃ"}</span>}
         </div>
-        <div style={{fontSize:12,color:T.t8}}>
+        <div style={{fontSize:12,color:T.t5}}>
           {nextSat.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
           {myGroup&&<span style={{marginLeft:8,padding:"1px 8px",borderRadius:20,background:T.bgDeep,border:`1px solid ${T.border}`,fontSize:11,color:T.t7}}>{myGroup}</span>}
         </div>
@@ -104,7 +104,7 @@ function SaturdayBanner({ user, schedule, groups, T }) {
       {!isToday&&(
         <div style={{textAlign:"center",padding:"6px 14px",background:color+"18",borderRadius:8,border:`1px solid ${color}33`}}>
           <div style={{fontSize:26,fontWeight:700,color,lineHeight:1}}>{days}</div>
-          <div style={{fontSize:9,color:T.t8,marginTop:2,letterSpacing:"0.06em"}}>{days===1?"DIA":"DIAS"}</div>
+          <div style={{fontSize:9,color:T.t5,marginTop:2,letterSpacing:"0.06em"}}>{days===1?"DIA":"DIAS"}</div>
         </div>
       )}
     </div>
@@ -123,7 +123,7 @@ function MyAbsenceCard({ T }) {
   const {summary} = stats;
   const pct = summary.totalAbsences>0?Math.round((1-summary.overLimitCount/summary.totalAbsences)*100):100;
   const trend = summary.trend;
-  const trendIcon = trend==="alta"?<TrendingUp size={12} style={{color:T.red}}/>:trend==="queda"?<TrendingDown size={12} style={{color:T.green}}/>:<Minus size={12} style={{color:T.t9}}/>;
+  const trendIcon = trend==="alta"?<TrendingUp size={12} style={{color:T.red}}/>:trend==="queda"?<TrendingDown size={12} style={{color:T.green}}/>:<Minus size={12} style={{color:T.t5}}/>;
 
   return (
     <Card style={{marginBottom:12}}>
@@ -135,12 +135,12 @@ function MyAbsenceCard({ T }) {
           {label:"acima 15 min",value:summary.overLimitCount,color:summary.overLimitCount>0?T.red:T.green},
         ].map((k,i)=>(
           <div key={i} style={{background:T.bgDeep,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-            <div style={{fontSize:10,color:T.t9,marginBottom:3}}>{k.label}</div>
+            <div style={{fontSize:10,color:T.t5,marginBottom:3}}>{k.label}</div>
             <div style={{fontSize:18,fontWeight:600,color:k.color}}>{k.value}</div>
           </div>
         ))}
       </div>
-      <div style={{fontSize:10,color:T.t9,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
+      <div style={{fontSize:10,color:T.t5,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
         <span>Cumprimento do limite</span>
         <span style={{display:"flex",alignItems:"center",gap:4}}>{trendIcon} {pct}%</span>
       </div>
@@ -165,7 +165,7 @@ function InsightsCard({ T }) {
   const workDays=byDow.filter(d=>d.dow>=1&&d.dow<=5);
   if (workDays.length) {
     const busy=workDays.reduce((a,b)=>b.count>a.count?b:a,workDays[0]);
-    if (busy.count>0) insights.push({color:T.t9,bg:T.bgDeep,text:`Você sai mais às ${DAYS[busy.dow]||busy.label} (${busy.count}x no período)`});
+    if (busy.count>0) insights.push({color:T.t5,bg:T.bgDeep,text:`Você sai mais às ${DAYS[busy.dow]||busy.label} (${busy.count}x no período)`});
   }
   if (summary.overLimitCount>0) {
     const pct=Math.round(summary.overLimitCount/summary.totalAbsences*100);
@@ -209,14 +209,14 @@ function TeamSaturdayCard({ user, schedule, groups, users, T }) {
     <Card style={{marginBottom:12}}>
       <div style={{fontSize:12,fontWeight:600,color:T.t1,marginBottom:10,display:"flex",justifyContent:"space-between"}}>
         <span>Equipe — {nextSat.toLocaleDateString("pt-BR",{weekday:"short",day:"numeric",month:"short"})}</span>
-        <span style={{fontSize:11,color:T.t9,fontWeight:400}}>próx. sábado</span>
+        <span style={{fontSize:11,color:T.t5,fontWeight:400}}>próx. sábado</span>
       </div>
       {rows.map(({g,workCount,offCount},i)=>(
         <div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:i<rows.length-1?`1px solid ${T.borderRow}`:"none"}}>
           <div style={{width:8,height:8,borderRadius:"50%",background:g.color,flexShrink:0}}/>
           <div style={{flex:1,fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.name}</div>
           <span style={{fontSize:11,color:T.green,fontWeight:600}}>{workCount} trabalham</span>
-          <span style={{fontSize:11,color:T.t9}}>{offCount} folga</span>
+          <span style={{fontSize:11,color:T.t5}}>{offCount} folga</span>
         </div>
       ))}
     </Card>
@@ -246,7 +246,7 @@ function TeamTodayCard({ T }) {
           {label:"acima do limite",value:overToday,color:overToday>0?T.red:T.green},
         ].map((k,i)=>(
           <div key={i} style={{background:T.bgDeep,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-            <div style={{fontSize:10,color:T.t9,marginBottom:3}}>{k.label}</div>
+            <div style={{fontSize:10,color:T.t5,marginBottom:3}}>{k.label}</div>
             <div style={{fontSize:18,fontWeight:600,color:k.color}}>{k.value}</div>
           </div>
         ))}
@@ -356,7 +356,7 @@ function MyVacationCard({ user, T }) {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
           <div style={{ textAlign: "center", padding: "8px 14px", background: urgencyColor + "18", borderRadius: 10, flexShrink: 0 }}>
             <div style={{ fontSize: 28, fontWeight: 900, color: urgencyColor, lineHeight: 1 }}>{du}</div>
-            <div style={{ fontSize: 9, color: T.t8, marginTop: 2, letterSpacing: "0.06em" }}>{du === 1 ? "DIA" : "DIAS"}</div>
+            <div style={{ fontSize: 9, color: T.t5, marginTop: 2, letterSpacing: "0.06em" }}>{du === 1 ? "DIA" : "DIAS"}</div>
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: urgencyColor, marginBottom: 4 }}>
@@ -383,7 +383,7 @@ function MyVacationCard({ user, T }) {
   return (
     <Card style={{ marginBottom: 12, background: T.bgDeep, border: `1px solid ${T.border}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <Umbrella size={20} style={{ color: T.t9, flexShrink: 0 }} />
+        <Umbrella size={20} style={{ color: T.t5, flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: T.t2, marginBottom: 2 }}>Nenhuma férias agendada</div>
           <div style={{ fontSize: 11, color: T.t7 }}>
@@ -430,7 +430,7 @@ function VacationDashWidget({ T, onNavigate }) {
         ].map((k, i) => (
           <div key={i} style={{ background: T.bgDeep, borderRadius: 8, padding: "10px 12px", border: `1px solid ${T.border}`, cursor: k.onClick ? "pointer" : "default" }}
             onClick={k.onClick}>
-            <div style={{ fontSize: 10, color: T.t9, marginBottom: 3 }}>{k.label}</div>
+            <div style={{ fontSize: 10, color: T.t5, marginBottom: 3 }}>{k.label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: k.value > 0 ? k.color : T.t9 }}>{k.value}</div>
           </div>
         ))}
@@ -443,8 +443,8 @@ function VacationDashWidget({ T, onNavigate }) {
               <Avatar name={v.fullName} size={28} color={v.groupColor || "#FBBF24"} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.fullName}</div>
-                <div style={{ fontSize: 10, color: T.t8 }}>
-                  {v.groupName && <span style={{ marginRight: 4, color: T.t9 }}>{v.groupName} · </span>}
+                <div style={{ fontSize: 10, color: T.t5 }}>
+                  {v.groupName && <span style={{ marginRight: 4, color: T.t5 }}>{v.groupName} · </span>}
                   {new Date(v.startDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                   {" → "}
                   {new Date(v.endDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
@@ -464,7 +464,7 @@ function VacationDashWidget({ T, onNavigate }) {
               <Avatar name={v.fullName} size={28} color={v.groupColor || "#FBBF24"} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.fullName}</div>
-                <div style={{ fontSize: 10, color: T.t8 }}>
+                <div style={{ fontSize: 10, color: T.t5 }}>
                   {new Date(v.startDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                   {" → "}
                   {new Date(v.endDate + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
@@ -543,7 +543,7 @@ export default function Dashboard() {
           <h1 style={{fontSize:20,fontWeight:700,color:T.t1,marginBottom:3}}>
             {greeting()}, {user?.fullName?.split(" ")[0]} 👋
           </h1>
-          <p style={{color:T.t9,fontSize:12}}>
+          <p style={{color:T.t5,fontSize:12}}>
             {now.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})} · Semana {weekNum}
           </p>
         </div>
@@ -558,7 +558,7 @@ export default function Dashboard() {
             <div key={i} style={{background:T.bgDeep,borderRadius:10,padding:"12px 14px",border:`1px solid ${T.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
                 <div style={{color:s.color}}>{s.icon}</div>
-                <div style={{fontSize:10,color:T.t9}}>{s.label}</div>
+                <div style={{fontSize:10,color:T.t5}}>{s.label}</div>
               </div>
               <div style={{fontSize:22,fontWeight:600,color:s.color}}>{s.value}</div>
             </div>
@@ -583,7 +583,7 @@ export default function Dashboard() {
                 {pendingSwaps.length>0&&<span style={{fontSize:11,fontWeight:600,color:T.amber}}>{pendingSwaps.length} pendente{pendingSwaps.length>1?"s":""}</span>}
               </div>
               {pendingSwaps.length===0?(
-                <div style={{textAlign:"center",padding:16,color:T.t9}}>
+                <div style={{textAlign:"center",padding:16,color:T.t5}}>
                   <CheckCircle size={24} style={{marginBottom:6,opacity:0.35,color:T.green}}/>
                   <div style={{fontSize:12}}>Nenhuma troca pendente</div>
                 </div>
@@ -592,7 +592,7 @@ export default function Dashboard() {
                   <Avatar name={getUserName(sw.requesterId)} size={26} color={T.amber}/>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:11,fontWeight:600,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{getUserName(sw.requesterId)} → {getUserName(sw.covererId)}</div>
-                    <div style={{fontSize:10,color:T.t8}}>{new Date(sw.date+"T12:00:00").toLocaleDateString("pt-BR",{day:"numeric",month:"short"})}</div>
+                    <div style={{fontSize:10,color:T.t5}}>{new Date(sw.date+"T12:00:00").toLocaleDateString("pt-BR",{day:"numeric",month:"short"})}</div>
                   </div>
                   <span style={{fontSize:9,padding:"2px 7px",borderRadius:20,background:T.amber+"18",color:T.amber,fontWeight:600}}>PENDENTE</span>
                 </div>

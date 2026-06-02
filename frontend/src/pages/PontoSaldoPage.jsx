@@ -62,7 +62,7 @@ function Preset({ label, active, onClick, T }) {
       padding: "5px 11px", borderRadius: 20, border: `1px solid ${active ? T.accent : T.border}`,
       background: active ? T.accent + "22" : "transparent", color: active ? T.accent : T.t5,
       cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 400,
-      fontFamily: "'Sora',sans-serif", transition: "all 0.12s",
+      fontFamily: "'Sora',sans-serif", transition: "background 0.12s, color 0.12s, border-color 0.12s",
     }}>{label}</button>
   );
 }
@@ -105,7 +105,7 @@ function PersonRow({ u, showGroup, maxAbs, T, expanded, onToggle, canEdit, onTog
                     background: u.meioPeriodo ? "#A78BFA18" : T.bgDeep,
                     color: u.meioPeriodo ? "#A78BFA" : T.t8,
                     cursor: "pointer", lineHeight: 1.4, fontFamily: "'Sora',sans-serif",
-                    transition: "all 0.15s",
+                    transition: "background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
                   }}
                 >
                   {u.meioPeriodo ? "½" : "1"}
@@ -181,7 +181,7 @@ function PersonRow({ u, showGroup, maxAbs, T, expanded, onToggle, canEdit, onTog
             <div style={{ fontSize: 10, color: T.t7, fontWeight: 700, letterSpacing: "0.06em", gridColumn: "1/4" }}>TOTAL</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{fmtHours(u.workedMin)}</div>
             <div style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{fmtHours(u.expectedMin)}</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: balanceColor(u.balanceMin), fontVariantNumeric: "tabular-nums" }}>{fmtBalance(u.balanceMin)}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: balanceColor(u.workedMin - u.expectedMin), fontVariantNumeric: "tabular-nums" }}>{fmtBalance(u.workedMin - u.expectedMin)}</div>
           </div>
           {/* Period Summary */}
           <div style={{ borderTop: `1px solid ${T.border}`, padding: "12px 18px 14px", background: T.bgCard }}>
@@ -325,17 +325,18 @@ export default function PontoSaldoPage() {
       const entrada = d.batidas[0]?.recordedAt;
       const saida   = n % 2 === 0 ? d.batidas[n - 1]?.recordedAt : null;
       const rawBalance = workedMin - expectedMin;
-      const paidOT = expectedMin > 0 && rawBalance > 120 ? rawBalance - 120 : 0;
+      const toleratedBalance = Math.abs(rawBalance) <= 5 ? 0 : rawBalance;
+      const paidOT = expectedMin > 0 && toleratedBalance > 120 ? toleratedBalance - 120 : 0;
       // Cap daily banco credit at 2h (120 min); excess is paid overtime, not credited
-      const balanceMin = expectedMin > 0 && rawBalance > 120 ? 120 : rawBalance;
+      const balanceMin = expectedMin > 0 && toleratedBalance > 120 ? 120 : toleratedBalance;
       u.workedMin  += workedMin;
       u.expectedMin += expectedMin;
       u.daysCount++;
       if (isIncomplete) u.incompleteDays++;
-      if (rawBalance > 0) u.totalExtrasMin += rawBalance;
-      if (rawBalance < 0) u.totalFaltasMin += Math.abs(rawBalance);
+      if (toleratedBalance > 0) u.totalExtrasMin += toleratedBalance;
+      if (toleratedBalance < 0) u.totalFaltasMin += Math.abs(toleratedBalance);
       u.totalPaidOTMin += paidOT;
-      u.daysList.push({ date: d.date, workedMin, expectedMin, rawBalance, balanceMin, paidOT, n, isIncomplete, entrada, saida });
+      u.daysList.push({ date: d.date, workedMin, expectedMin, rawBalance: toleratedBalance, balanceMin, paidOT, n, isIncomplete, entrada, saida });
     }
     return [...byUser.values()].map(u => {
       const eq = equipeMap.get(u.userId);
@@ -494,7 +495,7 @@ export default function PontoSaldoPage() {
           {[["groups", "Por Grupo"], ["people", "Por Colaborador"]].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               padding: "7px 18px", border: "none", cursor: "pointer", fontSize: 13,
-              fontFamily: "'Sora',sans-serif", transition: "all 0.12s",
+              fontFamily: "'Sora',sans-serif", transition: "background 0.12s, color 0.12s, border-color 0.12s",
               background: tab === id ? T.accent : T.bgCard,
               color: tab === id ? "#fff" : T.t4,
               fontWeight: tab === id ? 700 : 400,

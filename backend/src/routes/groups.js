@@ -227,6 +227,9 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
         if (!exists) {
           insertOrReplace.run(uuidv4(), groupId, dateStr, uid, newMemberStatus);
         }
+        // 4. Remove o membro de qualquer outro grupo na mesma data (evita duplicata após troca de grupo)
+        db.prepare("DELETE FROM schedules WHERE user_id=? AND date=? AND group_id!=?")
+          .run(uid, dateStr, groupId);
       }
     }
   })();

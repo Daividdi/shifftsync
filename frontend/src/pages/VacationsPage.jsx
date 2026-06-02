@@ -523,7 +523,7 @@ export default function VacationsPage() {
                 { id: "approvals", label: admin ? "Aprovações" : "Pendentes", icon: Clock, badge: vacations.filter(v => v.status === "scheduled").length },
               ].map(({ id, label, icon: Icon, badge }) => (
                 <button key={id} onClick={() => setViewTab(id)}
-                  style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: viewTab === id ? 700 : 500, background: viewTab === id ? T.bgCard : "transparent", color: viewTab === id ? T.t1 : T.t7, boxShadow: viewTab === id ? "0 1px 4px #00000022" : "none", transition: "all 0.15s" }}>
+                  style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, padding: "6px 14px", borderRadius: 7, border: "none", cursor: "pointer", fontFamily: "'Sora',sans-serif", fontSize: 12, fontWeight: viewTab === id ? 700 : 500, background: viewTab === id ? T.bgCard : "transparent", color: viewTab === id ? T.t1 : T.t7, boxShadow: viewTab === id ? "0 1px 4px #00000022" : "none", transition: "background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s" }}>
                   <Icon size={13} /> {label}
                   {badge > 0 && (
                     <span style={{ position: "absolute", top: 1, right: 1, width: 14, height: 14, borderRadius: "50%", background: "#FBBF24", color: "#000", fontSize: 8, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{badge > 9 ? "9+" : badge}</span>

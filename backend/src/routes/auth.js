@@ -14,7 +14,11 @@ router.post("/login", async (req, res) => {
     return res.status(400).json({ error: "Username e password são obrigatórios" });
 
   const db = getDb();
-  const existing = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+  // Match usernames case-insensitively: LDAP/SSO can pass a different casing
+  // (e.g. when a user moves workstations) and the nightly sync stores them
+  // lowercased — a case-sensitive lookup would spawn a duplicate account and
+  // split the user's data (ponto, schedules, etc.).
+  const existing = db.prepare("SELECT * FROM users WHERE username = ? COLLATE NOCASE").get(username);
 
   // Local auth bypass for users with a password hash (test users)
   if (existing && existing.password) {
@@ -35,7 +39,9 @@ router.post("/login", async (req, res) => {
     let user = existing;
     if (!user) {
       const id = uuidv4();
-      db.prepare("INSERT INTO users (id,username,full_name,email,dept,title,synced_at) VALUES (?,?,?,?,?,?,datetime('now'))").run(id, username, ldapAttrs.fullName || username, ldapAttrs.email, ldapAttrs.dept, ldapAttrs.title);
+      // Store the username lowercased to match the nightly sync convention,
+      // so first-time logins land on a single canonical account.
+      db.prepare("INSERT INTO users (id,username,full_name,email,dept,title,synced_at) VALUES (?,?,?,?,?,?,datetime('now'))").run(id, username.toLowerCase(), ldapAttrs.fullName || username, ldapAttrs.email, ldapAttrs.dept, ldapAttrs.title);
       user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
     } else {
       db.prepare("UPDATE users SET full_name=?,email=?,dept=?,title=?,synced_at=datetime('now'),active=1 WHERE id=?").run(ldapAttrs.fullName || user.full_name, ldapAttrs.email, ldapAttrs.dept, ldapAttrs.title, user.id);

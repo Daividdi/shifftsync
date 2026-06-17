@@ -55,6 +55,33 @@ function ThemeToggle({ isDark, onToggle, T }) {
   );
 }
 
+// Seletor de cor de destaque (accent) — swatches redondos
+function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4,
+      padding: "7px 10px", background: T.bgDeep, border: `1px solid ${T.border}`, borderRadius: 14,
+    }}>
+      {Object.entries(ACCENTS).map(([key, a]) => {
+        const selected = key === accentKey;
+        return (
+          <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
+            style={{
+              width: 20, height: 20, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
+              background: a.gradient || a.accent,
+              border: selected ? `2px solid ${T.t1}` : "2px solid transparent",
+              boxShadow: selected ? `0 0 0 2px ${T.bgDeep}, 0 0 8px ${a.accent}99` : "none",
+              transform: selected ? "scale(1.15)" : "scale(1)",
+              transition: "transform .15s ease, box-shadow .15s ease, border-color .15s ease",
+              outline: "none",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 // Grupo de menu colapsável
 function NavGroup({ label, icon, children, defaultOpen = true, T }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -117,7 +144,7 @@ function NavItem({ id, label, icon, active, setActive, T, badge }) {
 
 export default function Sidebar({ active, setActive }) {
   const { user, logout } = useAuth();
-  const { theme: T, isDark, toggleTheme } = useTheme();
+  const { theme: T, isDark, toggleTheme, accentKey, setAccent, ACCENTS } = useTheme();
 
   const isAdmin  = user?.role === "ti" || user?.role === "hr";
   const isLeader = user?.role === "leader" || user?.role === "gerencia";
@@ -262,6 +289,7 @@ export default function Sidebar({ active, setActive }) {
       {/* Footer */}
       <div style={{ padding: "10px 10px 14px", borderTop: `1px solid ${T.borderSubtle}`, display: "flex", flexDirection: "column", gap: 8 }}>
         <ThemeToggle isDark={isDark} onToggle={toggleTheme} T={T} />
+        <AccentPicker T={T} ACCENTS={ACCENTS} accentKey={accentKey} setAccent={setAccent} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: T.bgDeep, borderRadius: 10, border: `1px solid ${T.border}` }}>
           <Avatar name={user?.fullName} size={32} color={ROLE_COLORS[user?.role] || T.accent} />

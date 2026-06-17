@@ -105,7 +105,13 @@ function AppContent() {
   return (
     <GameTimerProvider userId={user?.id}>
     <>
-    <style>{scrollbarCss}</style>
+    <style>{scrollbarCss}
+      {`@keyframes logoShine {
+        0% { background-position: 200% 0; }
+        16% { background-position: -130% 0; }
+        100% { background-position: -130% 0; }
+      }`}
+    </style>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
       <AbsenceAlert onNavigate={setActive}/>
       <Sidebar active={active} setActive={setActive}/>

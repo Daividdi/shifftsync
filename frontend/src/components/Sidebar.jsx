@@ -216,13 +216,28 @@ export default function Sidebar({ active, setActive }) {
       display: "flex", flexDirection: "column", height: "100vh", flexShrink: 0,
       position: "sticky", top: 0, transition: "background 0.25s, border-color 0.25s",
     }}>
-      {/* Logo */}
+      {/* Logo com brilho que passa periodicamente (luz mascarada pelo formato da logo) */}
       <div style={{ padding: "16px 16px 12px", borderBottom: `1px solid ${T.borderSubtle}` }}>
-        <img
-          src={isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"}
-          alt="angelTREAT"
-          style={{ height: 26, width: "auto", display: "block", margin: "0 auto 8px" }}
-        />
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+          <div style={{ position: "relative", display: "inline-block" }}>
+            <img
+              src={isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"}
+              alt="angelTREAT"
+              style={{ height: 26, width: "auto", display: "block" }}
+            />
+            <span aria-hidden style={{
+              position: "absolute", inset: 0, pointerEvents: "none",
+              WebkitMaskImage: `url(${isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"})`,
+              maskImage: `url(${isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"})`,
+              WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
+              WebkitMaskSize: "contain", maskSize: "contain",
+              WebkitMaskPosition: "center", maskPosition: "center",
+              background: "linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.9) 50%, transparent 62%)",
+              backgroundSize: "230% 100%",
+              animation: "logoShine 7s ease-in-out infinite",
+            }} />
+          </div>
+        </div>
         <div style={{ textAlign: "center", fontSize: 9, color: T.t10, letterSpacing: "0.12em", fontWeight: 700, textTransform: "uppercase" }}>
           ShiftSync · Workforce Manager
         </div>

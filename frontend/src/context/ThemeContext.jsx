@@ -19,15 +19,6 @@ export const ACCENTS = {
              gradient: "linear-gradient(90deg,#E40303,#FF8C00,#FFED00,#008026,#004DFF,#750787)" },
 };
 
-// Blend hex `a` toward hex `b` by ratio t (0..1) — used to tint base surfaces
-// with the chosen accent so the whole theme adopts the color, not just buttons.
-function mix(a, b, t) {
-  const pa = a.replace("#", ""), pb = b.replace("#", "");
-  const an = [0, 2, 4].map(i => parseInt(pa.slice(i, i + 2), 16));
-  const bn = [0, 2, 4].map(i => parseInt(pb.slice(i, i + 2), 16));
-  return "#" + an.map((v, i) => Math.round(v + (bn[i] - v) * t).toString(16).padStart(2, "0")).join("");
-}
-
 export function ThemeProvider({ children }) {
   const [isDark, setIsDark] = useState(() => {
     try { const s = localStorage.getItem("shiftsync_theme"); if (s) return s === "dark"; } catch {}
@@ -42,27 +33,14 @@ export function ThemeProvider({ children }) {
 
   const base = isDark ? THEMES.dark : THEMES.light;
   const ac   = ACCENTS[accentKey] || ACCENTS.blue;
-  const c    = ac.accent;
-  // Subtle accent tint on the base surfaces/borders so the chosen theme color
-  // reaches the whole UI (not just the accent). Ratios are kept low to preserve
-  // text contrast; text tokens (t1..t12) are never tinted.
-  const bgT = isDark ? 0.10 : 0.14;
-  const brT = isDark ? 0.20 : 0.24;
+  // Neutral base surfaces (no tint film). The theme restyles crisply through
+  // the accent — text, buttons, active states, focus rings, scrollbar, chart
+  // series — never as a translucent wash over the backgrounds.
   const theme = {
     ...base,
-    bgApp:        mix(base.bgApp,        c, bgT),
-    bgSidebar:    mix(base.bgSidebar,    c, bgT),
-    bgCard:       mix(base.bgCard,       c, bgT),
-    bgDeep:       mix(base.bgDeep,       c, bgT),
-    bgRowAlt:     mix(base.bgRowAlt,     c, bgT * 0.8),
-    bgSelected:   mix(base.bgSelected,   c, bgT * 1.5),
-    border:       mix(base.border,       c, brT),
-    borderSubtle: mix(base.borderSubtle, c, brT * 0.7),
-    borderRow:    mix(base.borderRow,    c, brT * 0.6),
-    tooltipBg:    mix(base.tooltipBg,    c, bgT),
-    accent: c,
+    accent: ac.accent,
     accentDark: ac.accentDark,
-    accentGradient: ac.gradient || `linear-gradient(135deg, ${c}, ${ac.accentDark})`,
+    accentGradient: ac.gradient || `linear-gradient(135deg, ${ac.accent}, ${ac.accentDark})`,
   };
   const setAccent = (k) => { if (ACCENTS[k]) setAccentKey(k); };
 

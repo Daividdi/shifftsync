@@ -92,14 +92,14 @@ function AppContent() {
     ? `
       ::-webkit-scrollbar { width: 7px; height: 7px; }
       ::-webkit-scrollbar-track { background: #111219; }
-      ::-webkit-scrollbar-thumb { background: #32334a; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #42435a; }
+      ::-webkit-scrollbar-thumb { background: ${T.accent}55; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: ${T.accent}99; }
     `
     : `
       ::-webkit-scrollbar { width: 7px; height: 7px; }
       ::-webkit-scrollbar-track { background: #ECEDF8; }
-      ::-webkit-scrollbar-thumb { background: #C0C1D6; border-radius: 4px; }
-      ::-webkit-scrollbar-thumb:hover { background: #A0A1BC; }
+      ::-webkit-scrollbar-thumb { background: ${T.accent}66; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: ${T.accent}aa; }
     `;
 
   return (

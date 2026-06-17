@@ -148,19 +148,25 @@ function NavItem({ id, label, icon, active, setActive, T, badge }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        position: "relative",
         display: "flex", alignItems: "center", gap: 9, width: "100%",
-        padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+        padding: "8px 10px", borderRadius: 9, border: "none", cursor: "pointer",
         background: isActive
-          ? `linear-gradient(90deg, ${T.accent}22 0%, ${T.accent}08 100%)`
+          ? `linear-gradient(90deg, ${T.accent}2b 0%, ${T.accent}05 100%)`
           : hovered ? T.bgSelected : "transparent",
         color: isActive ? T.accent : hovered ? T.t3 : T.t4,
         fontSize: 12.5, fontWeight: isActive ? 700 : 400,
-        marginBottom: 1, textAlign: "left", transition: "background 0.12s, color 0.12s, border-color 0.12s",
+        marginBottom: 1, textAlign: "left", transition: "background 0.15s ease, color 0.15s ease",
         fontFamily: "'Sora', sans-serif",
-        borderLeft: isActive ? `3px solid ${T.accent}` : "3px solid transparent",
-        paddingLeft: isActive ? 8 : 10,
       }}>
-      <span style={{ opacity: isActive ? 1 : hovered ? 0.9 : 0.8, flexShrink: 0, transition: "opacity 0.12s" }}>{icon}</span>
+      {/* Indicador ativo: barra em gradiente com brilho na cor do tema */}
+      {isActive && (
+        <span aria-hidden className="ss-active-bar" style={{
+          position: "absolute", left: 0, top: 6, bottom: 6, width: 3, borderRadius: "0 4px 4px 0",
+          background: T.accentGradient, boxShadow: `0 0 9px ${T.accent}, 0 0 2px ${T.accent}`,
+        }} />
+      )}
+      <span style={{ opacity: isActive ? 1 : hovered ? 0.9 : 0.8, flexShrink: 0, transition: "opacity 0.12s", filter: isActive ? `drop-shadow(0 0 5px ${T.accent}66)` : "none" }}>{icon}</span>
       <span className="ss-label" style={{ flex: 1 }}>{label}</span>
       {badge && (
         <span className="ss-label" style={{
@@ -233,6 +239,8 @@ export default function Sidebar({ active, setActive }) {
         boxShadow: (collapsed && hover) ? "10px 0 30px rgba(0,0,0,0.30)" : "none",
         transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), background 0.25s, border-color 0.25s, box-shadow 0.2s",
       }}>
+      {/* Faixa de destaque no topo — cor do tema */}
+      <div aria-hidden style={{ height: 3, flexShrink: 0, background: T.accentGradient }} />
       {/* Logo com brilho que passa periodicamente (luz mascarada pelo formato da logo) */}
       <div style={{ padding: "16px 16px 12px", borderBottom: `1px solid ${T.borderSubtle}` }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>

@@ -122,6 +122,7 @@ function AppContent() {
         border-left-color: transparent !important;
       }
       .ss-collapsed .ss-logo { height: auto !important; max-width: 46px; }`}
+      {`::selection { background: ${T.accent}55; color: #fff; }`}
     </style>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
       <AbsenceAlert onNavigate={setActive}/>

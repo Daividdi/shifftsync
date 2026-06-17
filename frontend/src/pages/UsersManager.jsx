@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, RefreshCw, Cake, Shield, ShieldOff, AlertTriangle, Clock } from "lucide-react";
+import { Search, RefreshCw, Cake, Shield, ShieldOff, AlertTriangle, Clock, CalendarOff } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Input, Select } from "../components/UI";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
@@ -107,6 +107,15 @@ export default function UsersManager() {
   const handleToggleMeioPeriodo = async (userId, current) => {
     try {
       await api.patch(`/users/${userId}/meio-periodo`, { meioperiodo: !current });
+      fetchUsers();
+    } catch (e) {
+      showFlash("Erro: " + (e.response?.data?.error || e.message));
+    }
+  };
+
+  const handleToggleNoSaturday = async (userId, current) => {
+    try {
+      await api.patch(`/users/${userId}/no-saturday`, { nosaturday: !current });
       fetchUsers();
     } catch (e) {
       showFlash("Erro: " + (e.response?.data?.error || e.message));
@@ -281,7 +290,7 @@ export default function UsersManager() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.borderSubtle}`, background: T.bgDeep }}>
-                {["FUNCIONÁRIO","USUÁRIO","DEPARTAMENTO","CARGO","ANIVERSÁRIO","MEIO PERÍODO","ROLE","PROTEÇÃO","AÇÕES"].map((h) => (
+                {["FUNCIONÁRIO","USUÁRIO","DEPARTAMENTO","CARGO","ANIVERSÁRIO","MEIO PERÍODO","SÁBADO","ROLE","PROTEÇÃO","AÇÕES"].map((h) => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: T.t8, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -294,6 +303,7 @@ export default function UsersManager() {
                 const todayMMDD = `${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
                 const isBdToday = u.birthDate && u.birthDate.slice(5) === todayMMDD;
                 const isMeio = !!u.meioPeriodo;
+                const isNoSat = !!u.noSaturday;
                 return (
                   <tr key={u.id} style={{ borderBottom: `1px solid ${T.borderRow}`, background: i % 2 === 0 ? "transparent" : T.bgRowAlt, opacity: isActive ? 1 : 0.45 }}>
                     <td style={{ padding: "11px 16px" }}>
@@ -372,6 +382,25 @@ export default function UsersManager() {
                       >
                         <Clock size={11} />
                         {isMeio ? "½ Período" : "Integral"}
+                      </button>
+                    </td>
+                    {/* Trabalha aos sábados? */}
+                    <td style={{ padding: "11px 16px" }}>
+                      <button
+                        onClick={() => handleToggleNoSaturday(u.id, isNoSat)}
+                        title={isNoSat ? "Não trabalha aos sábados — sem obrigação de ponto e fora da escala. Clique para reativar sábados" : "Trabalha aos sábados. Clique para marcar que NÃO trabalha aos sábados"}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 5,
+                          background: isNoSat ? T.amber+"18" : T.bgDeep,
+                          border: `1px solid ${isNoSat ? T.amber+"55" : T.border}`,
+                          borderRadius: 6, padding: "4px 10px",
+                          color: isNoSat ? T.amber : T.t9,
+                          cursor: "pointer", fontSize: 11, fontWeight: isNoSat ? 700 : 400,
+                          fontFamily: "'Sora',sans-serif",
+                        }}
+                      >
+                        <CalendarOff size={11} />
+                        {isNoSat ? "Sem sábado" : "Trabalha"}
                       </button>
                     </td>
                     <td style={{ padding: "11px 16px" }}>

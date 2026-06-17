@@ -209,6 +209,7 @@ function formatUser(u) {
     syncedAt: u.synced_at, birthDate: u.birth_date || null,
     syncExempt: Boolean(u.sync_exempt),
     meioPeriodo: Boolean(u.meio_periodo),
+    noSaturday: Boolean(u.no_saturday),
   };
 }
 
@@ -217,6 +218,14 @@ router.patch('/:id/meio-periodo', requireAuth, requireRole('hr','ti','gerencia')
   const { meioperiodo } = req.body;
   const db = getDb();
   db.prepare('UPDATE users SET meio_periodo=? WHERE id=?').run(meioperiodo ? 1 : 0, req.params.id);
+  return res.json({ ok: true });
+});
+
+// PATCH /api/users/:id/no-saturday — mark whether the user works Saturdays
+router.patch('/:id/no-saturday', requireAuth, requireRole('hr','ti','gerencia'), (req, res) => {
+  const { nosaturday } = req.body;
+  const db = getDb();
+  db.prepare('UPDATE users SET no_saturday=? WHERE id=?').run(nosaturday ? 1 : 0, req.params.id);
   return res.json({ ok: true });
 });
 

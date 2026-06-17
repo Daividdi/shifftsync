@@ -61,6 +61,60 @@ router.get("/", requireAuth, (req, res) => {
     result[dateKey][row.group_id][row.status].push(row.user_id);
   }
 
+  // ── Overlay approved swap_requests ─────────────────────────────────────
+  // For each approved swap: on the original date the coverer works in place of the requester;
+  // on the cover_comp_date the requester works in place of the coverer.
+  if (year && month !== undefined) {
+    const pad = String(Number(month) + 1).padStart(2, "0");
+    const monthStart = `${year}-${pad}-01`;
+    const monthEnd   = `${year}-${pad}-31`;
+    try {
+      const swaps = db.prepare(`
+        SELECT sw.requester_id, sw.coverer_id, sw.date, sw.group_id, sw.cover_comp_date,
+               (SELECT group_id FROM group_members WHERE user_id = sw.coverer_id LIMIT 1) as coverer_group_id
+        FROM swap_requests sw
+        WHERE sw.status = 'approved'
+          AND (sw.date BETWEEN ? AND ? OR sw.cover_comp_date BETWEEN ? AND ?)
+      `).all(monthStart, monthEnd, monthStart, monthEnd);
+
+      const removeFromList = (groupBucket, uid) => {
+        if (!groupBucket) return;
+        groupBucket.working = groupBucket.working.filter(x => x !== uid);
+        groupBucket.off     = groupBucket.off.filter(x => x !== uid);
+      };
+      const ensureBucket = (dateKey, groupId) => {
+        if (!result[dateKey]) result[dateKey] = {};
+        if (!result[dateKey][groupId]) result[dateKey][groupId] = { working: [], off: [] };
+        return result[dateKey][groupId];
+      };
+
+      for (const sw of swaps) {
+        const reqGroup = sw.group_id;
+        const covGroup = sw.coverer_group_id || sw.group_id;
+        // Original swap date: requester is off, coverer is working
+        if (sw.date >= monthStart && sw.date <= monthEnd) {
+          const dateKey = new Date(sw.date + "T12:00:00").toDateString();
+          const reqBucket = ensureBucket(dateKey, reqGroup);
+          const covBucket = ensureBucket(dateKey, covGroup);
+          removeFromList(reqBucket, sw.requester_id);
+          removeFromList(covBucket, sw.coverer_id);
+          if (!reqBucket.off.includes(sw.requester_id))     reqBucket.off.push(sw.requester_id);
+          if (!covBucket.working.includes(sw.coverer_id))   covBucket.working.push(sw.coverer_id);
+        }
+        // Comp date: roles reversed — requester works (compensating), coverer is off
+        if (sw.cover_comp_date && sw.cover_comp_date >= monthStart && sw.cover_comp_date <= monthEnd) {
+          const dateKey = new Date(sw.cover_comp_date + "T12:00:00").toDateString();
+          const reqBucket = ensureBucket(dateKey, reqGroup);
+          const covBucket = ensureBucket(dateKey, covGroup);
+          removeFromList(reqBucket, sw.requester_id);
+          removeFromList(covBucket, sw.coverer_id);
+          if (!reqBucket.working.includes(sw.requester_id)) reqBucket.working.push(sw.requester_id);
+          if (!covBucket.off.includes(sw.coverer_id))       covBucket.off.push(sw.coverer_id);
+        }
+      }
+    } catch (_) {}
+  }
+
   // Overlay vacation data for the month — scoped to same groups as schedule
   if (year && month !== undefined) {
     const pad = String(Number(month) + 1).padStart(2, "0");
@@ -154,6 +208,11 @@ router.post("/auto", requireAuth, requireRole("hr", "leader"), (req, res) => {
     "DELETE FROM schedules WHERE group_id = ? AND date = ?"
   );
 
+  // Users who do not work Saturdays are never put on a working Saturday shift.
+  const noSatSet = new Set(
+    db.prepare("SELECT id FROM users WHERE no_saturday=1").all().map(r => r.id)
+  );
+
   const tx = db.transaction(() => {
     for (const group of allGroups) {
       const members = db.prepare(
@@ -195,11 +254,48 @@ router.post("/auto", requireAuth, requireRole("hr", "leader"), (req, res) => {
           off     = satIndex % 2 === 0 ? teamB : teamA;
         }
 
+        // Move any "no Saturday" users out of the working set — they are always off.
+        if (noSatSet.size) {
+          off = off.concat(working.filter(uid => noSatSet.has(uid)));
+          working = working.filter(uid => !noSatSet.has(uid));
+        }
+
         for (const uid of working) {
           insertOrReplace.run(uuidv4(), group.id, dateStr, uid, "working");
         }
         for (const uid of off) {
           insertOrReplace.run(uuidv4(), group.id, dateStr, uid, "off");
+        }
+      }
+    }
+
+    // ── Re-apply approved swaps that touch any regenerated date ────────────
+    const dateRange = targetSats.map(d => toDateString(d));
+    if (dateRange.length) {
+      const ph = dateRange.map(() => "?").join(",");
+      const affected = db.prepare(`
+        SELECT requester_id, coverer_id, date, group_id, cover_comp_date,
+               (SELECT group_id FROM group_members WHERE user_id = swap_requests.coverer_id LIMIT 1) as coverer_group_id
+        FROM swap_requests
+        WHERE status='approved' AND (date IN (${ph}) OR cover_comp_date IN (${ph}))
+      `).all(...dateRange, ...dateRange);
+
+      const upd = db.prepare("UPDATE schedules SET status=? WHERE user_id=? AND date=? AND group_id=?");
+      const ins = db.prepare("INSERT OR REPLACE INTO schedules (id, group_id, date, user_id, status) VALUES (?,?,?,?,?)");
+      const apply = (uid, date, gid, status) => {
+        const ex = db.prepare("SELECT id FROM schedules WHERE user_id=? AND date=? AND group_id=?").get(uid, date, gid);
+        if (ex) upd.run(status, uid, date, gid);
+        else    ins.run(uuidv4(), gid, date, uid, status);
+      };
+      for (const sw of affected) {
+        const covG = sw.coverer_group_id || sw.group_id;
+        if (dateRange.includes(sw.date)) {
+          apply(sw.requester_id, sw.date, sw.group_id, "off");
+          apply(sw.coverer_id,   sw.date, covG,        "working");
+        }
+        if (sw.cover_comp_date && dateRange.includes(sw.cover_comp_date)) {
+          apply(sw.requester_id, sw.cover_comp_date, sw.group_id, "working");
+          apply(sw.coverer_id,   sw.cover_comp_date, covG,        "off");
         }
       }
     }

@@ -71,6 +71,8 @@ function runMigrations() {
   try { db.prepare("ALTER TABLE users ADD COLUMN acq_override_start TEXT").run(); } catch (_) {}
   try { db.prepare("ALTER TABLE users ADD COLUMN acq_override_end TEXT").run(); } catch (_) {}
   try { db.prepare("ALTER TABLE users ADD COLUMN conc_override_end TEXT").run(); } catch (_) {}
+  // Users who do not work on Saturdays: no Saturday shift, no Saturday punch obligation (no Falta).
+  try { db.prepare("ALTER TABLE users ADD COLUMN no_saturday INTEGER DEFAULT 0").run(); } catch (_) {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS banco_horas_ajustes (
       id          TEXT PRIMARY KEY,

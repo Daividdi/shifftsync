@@ -6,6 +6,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const router = express.Router();
 
 function today() { return new Date().toISOString().slice(0, 10); }
+function yesterday() { const d = new Date(Date.now() - 86400000); return d.toISOString().slice(0, 10); }
 function isAdmin(role)  { return ["hr","ti","gerencia"].includes(role); }
 function isLeader(role) { return role === "leader" || isAdmin(role); }
 
@@ -315,39 +316,110 @@ router.delete("/:id", requireAuth, (req, res) => {
 
 // ── Banco de Horas ──────────────────────────────────────
 
-function computeWorkedMinutes(batidas) {
-  const sorted = [...batidas].sort((a, b) => (a.time_millis || 0) - (b.time_millis || 0));
-  let totalMs = 0;
-  for (let i = 0; i + 1 < sorted.length; i += 2) {
-    const ms = (sorted[i + 1].time_millis || 0) - (sorted[i].time_millis || 0);
-    if (ms > 0) totalMs += ms;
-  }
-  // Odd-punch heuristic: last punch looks like end-of-day (>=15h local/BRT=UTC-3)
-  // → assume 1h lunch break occurred in the orphaned gap, credit the rest as work
-  if (sorted.length >= 3 && sorted.length % 2 === 1) {
-    const last = sorted[sorted.length - 1];
-    const prev = sorted[sorted.length - 2];
-    const lastLocalHour = ((new Date(last.time_millis || 0).getUTCHours() - 3) + 24) % 24;
-    if (lastLocalHour >= 15) {
-      const gapMs = (last.time_millis || 0) - (prev.time_millis || 0);
-      totalMs += Math.max(0, gapMs - 60 * 60000);
-    }
-  }
-  return Math.round(totalMs / 60000);
-}
-
 function getDayExpected(dateStr, fullDayMin) {
   const d = new Date(dateStr + "T12:00:00Z");
   const dow = d.getUTCDay();
-  if (dow === 0) return 0;    // domingo: nao trabalha
-  if (dow === 6) return 240;  // sabado: meio periodo (4h)
-  return fullDayMin;           // dias uteis: padrao do usuario
+  if (dow === 0) return 0;
+  if (dow === 6) return 240;
+  return fullDayMin;
 }
 
-// Cap Saturday worked minutes at 4h (240 min) — extra time is not credited
-function capWorkedSat(dateStr, minutes) {
-  const dow = new Date(dateStr + "T12:00:00Z").getUTCDay();
-  return dow === 6 ? Math.min(minutes, 240) : minutes;
+// Daily extras cap — anything above this is "Hora Extra 50%" (paid OT, NOT banked).
+const PAID_OT_DAILY_CAP = 120; // 2h
+// Splits gross extras into the portion that goes to the bank and the portion paid as 50% OT.
+function splitExtrasForOT(extraMin) {
+  const paidOTMin = Math.max(0, extraMin - PAID_OT_DAILY_CAP);
+  return { bankableExtras: extraMin - paidOTMin, paidOTMin };
+}
+// Entry/exit deviation tolerance — events ≤ this many minutes are ignored.
+// Lunch deviations are NOT tolerated (every minute counts).
+const TOL_ENTRY_EXIT = 5;
+
+// Deviation-model formula matching the PDF reference.
+// Tracks buckets per-event (PDF-style):
+//   atrasoMin   = entry late + extra lunch (PDF: "Atraso A")
+//   saMin       = early exit               (PDF: "Saída Antecipada SA")
+//   extraMin    = early entry + short lunch + late exit (PDF: "Extras do período" — gross)
+//   paidOTMin   = portion of extras above PAID_OT_DAILY_CAP (PDF: "Hora Extra 50%")
+// Banked extras = extraMin - paidOTMin   (PDF: "Extras a Compensar")
+// Saldo = (extraMin - paidOTMin) - atrasoMin - saMin   (matches PDF formula exactly).
+function computeDayDev(batidas, expected, isSat, schedStart) {
+  const SS = schedStart !== undefined ? schedStart : 480;
+  const toMin = ms => { const d = new Date(ms || 0); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+  const sorted = [...batidas].sort((a, b) => (a.time_millis || 0) - (b.time_millis || 0));
+  const N = sorted.length;
+  let worked = 0, totalBreaks = 0;
+  for (let i = 0; i + 1 < N; i += 2) {
+    const from = toMin(sorted[i].time_millis), to = toMin(sorted[i+1].time_millis);
+    const dur = to >= from ? to - from : to + 1440 - from;
+    if (dur > 0) worked += dur;
+  }
+  for (let i = 1; i + 1 < N; i += 2) {
+    const from = toMin(sorted[i].time_millis), to = toMin(sorted[i+1].time_millis);
+    const dur = to >= from ? to - from : to + 1440 - from;
+    if (dur > 0) totalBreaks += dur;
+  }
+  if (N === 0 || N % 2 === 1) return { balance: 0, worked, lunchMin: null, atrasoMin: 0, saMin: 0, extraMin: 0, paidOTMin: 0 };
+
+  // Saturday: 4h obligation starting at 08:00, no lunch.
+  // Entry has 5-min tolerance (early-entry ≤5 not credited); exit always counted in full.
+  if (isSat) {
+    const SAT_START = 480;
+    const SAT_END = SAT_START + expected;
+    const P1 = toMin(sorted[0].time_millis), Plast = toMin(sorted[N-1].time_millis);
+    let atrasoMin = 0, saMin = 0, extraMin = 0;
+    const entryDev = P1 - SAT_START;
+    if (Math.abs(entryDev) > TOL_ENTRY_EXIT) {
+      if (entryDev > 0) atrasoMin += entryDev; else extraMin += -entryDev;
+    }
+    const exitDev = Plast - SAT_END;
+    if (exitDev > 0) extraMin += exitDev; else if (exitDev < 0) saMin += -exitDev;
+    const { bankableExtras, paidOTMin } = splitExtrasForOT(extraMin);
+    return { balance: bankableExtras - atrasoMin - saMin, worked, lunchMin: null, atrasoMin, saMin, extraMin, paidOTMin };
+  }
+
+  // Half-period (no lunch, N=2): flexible timing — use simple worked-vs-expected (no tolerance).
+  // This applies to Designer 6h, half-day shifts with 2 punches only.
+  const isHalfPeriod = N === 2 && expected < 480;
+  if (isHalfPeriod) {
+    const raw = worked - expected;
+    const ex  = raw > 0 ? raw : 0;
+    const at  = raw < 0 ? -raw : 0;
+    const { bankableExtras, paidOTMin } = splitExtrasForOT(ex);
+    return { balance: bankableExtras - at, worked, lunchMin: null, atrasoMin: at, saMin: 0, extraMin: ex, paidOTMin };
+  }
+  const fullWeekday = expected >= 360;
+  if (!fullWeekday) {
+    const raw = worked - expected;
+    const ex  = raw > 0 ? raw : 0;
+    const at  = raw < 0 ? -raw : 0;
+    const { bankableExtras, paidOTMin } = splitExtrasForOT(ex);
+    return { balance: bankableExtras - at, worked, lunchMin: null, atrasoMin: at, saMin: 0, extraMin: ex, paidOTMin };
+  }
+
+  // Full weekday — entry/exit have 5-min tolerance; lunch has none.
+  // Add +60 only if employee takes a lunch break (i.e., full 8h day OR has 4+ punches recorded).
+  const hasLunch = expected >= 480 || N >= 4;
+  const SCHED_END = SS + expected + (hasLunch ? 60 : 0);
+  const P1 = toMin(sorted[0].time_millis), Plast = toMin(sorted[N-1].time_millis);
+  let atrasoMin = 0, saMin = 0, extraMin = 0;
+  const entryDev = P1 - SS;
+  if (Math.abs(entryDev) > TOL_ENTRY_EXIT) {
+    if (entryDev > 0) atrasoMin += entryDev; else extraMin += -entryDev;
+  }
+  let lunchMin = null;
+  if (N >= 4) {
+    lunchMin = totalBreaks;
+    const bd = totalBreaks - 60;
+    if (bd > 0) atrasoMin += bd; else if (bd < 0) extraMin += -bd;
+  }
+  const exitDev = Plast - SCHED_END;
+  if (Math.abs(exitDev) > TOL_ENTRY_EXIT) {
+    if (exitDev > 0) extraMin += exitDev; else saMin += -exitDev;
+  }
+  const { bankableExtras, paidOTMin } = splitExtrasForOT(extraMin);
+  const balance = bankableExtras - atrasoMin - saMin;
+  return { balance, worked, lunchMin, atrasoMin, saMin, extraMin, paidOTMin };
 }
 
 // GET /api/ponto/banco-horas
@@ -369,7 +441,7 @@ router.get("/banco-horas", requireAuth, (req, res) => {
 
   const now = new Date();
   const from = dateFrom || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to   = dateTo   || now.toISOString().slice(0, 10);
+  const to   = dateTo   || yesterday();
 
   // Find active period using the 'to' date
   const periodo = db.prepare(
@@ -379,11 +451,11 @@ router.get("/banco-horas", requireAuth, (req, res) => {
   const effectiveFrom = isAdmin(role) ? from : (from < periodStart ? periodStart : from);
 
   const batidas = db.prepare(
-    "SELECT * FROM ponto_batidas WHERE user_id=? AND date BETWEEN ? AND ? ORDER BY date, time_millis ASC"
+    "SELECT * FROM ponto_batidas WHERE user_id=? AND date BETWEEN ? AND ? AND deleted_at IS NULL ORDER BY date, time_millis ASC"
   ).all(userId, effectiveFrom, to);
 
   const manualMain = db.prepare(
-    "SELECT recorded_at, CAST((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0 AS INTEGER) as time_millis, date FROM ponto_records WHERE user_id=? AND source='manual' AND date BETWEEN ? AND ?"
+    "SELECT recorded_at, CAST(ROUND((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0) AS INTEGER) as time_millis, date FROM ponto_records WHERE user_id=? AND source IN ('manual','abono') AND date BETWEEN ? AND ?"
   ).all(userId, effectiveFrom, to);
 
   const adjustments = db.prepare(`
@@ -394,19 +466,59 @@ router.get("/banco-horas", requireAuth, (req, res) => {
     ORDER BY bha.date, bha.created_at
   `).all(userId, effectiveFrom, to);
 
+  // Approved abonos overlapping the period — used to compute per-day "Abono" time granted.
+  const abonosApproved = db.prepare(`
+    SELECT punch_date, punch_date_to, punch_time, punch_time_to, reason, justification
+    FROM abono_requests
+    WHERE user_id=? AND status='approved'
+      AND COALESCE(punch_date_to, punch_date) >= ? AND punch_date <= ?
+  `).all(userId, effectiveFrom, to);
+  function abonoMinutesForDate(date) {
+    let total = 0;
+    for (const ab of abonosApproved) {
+      const start = ab.punch_date;
+      const end   = ab.punch_date_to || ab.punch_date;
+      if (date < start || date > end) continue;
+      const dow = new Date(date + "T12:00:00Z").getUTCDay();
+      if (dow === 0) continue; // Sunday: not obligated, no abono relevance
+      if (ab.punch_time && ab.punch_time_to) {
+        const [h1, m1] = ab.punch_time.split(':').map(Number);
+        const [h2, m2] = ab.punch_time_to.split(':').map(Number);
+        total += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+      } else if (!ab.punch_time) {
+        // Full-day default — 4h for Saturday, 8h for weekday.
+        total += (dow === 6) ? 240 : 480;
+      }
+    }
+    return total;
+  }
+
   const prevBatidas = db.prepare(
-    "SELECT date, time_millis FROM ponto_batidas WHERE user_id=? AND date >= ? AND date < ? ORDER BY date, time_millis ASC"
+    "SELECT date, time_millis FROM ponto_batidas WHERE user_id=? AND date >= ? AND date < ? AND deleted_at IS NULL ORDER BY date, time_millis ASC"
   ).all(userId, periodStart, effectiveFrom);
 
   const manualPrev = db.prepare(
-    "SELECT recorded_at, CAST((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0 AS INTEGER) as time_millis, date FROM ponto_records WHERE user_id=? AND source='manual' AND date >= ? AND date < ?"
+    "SELECT recorded_at, CAST(ROUND((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0) AS INTEGER) as time_millis, date FROM ponto_records WHERE user_id=? AND source IN ('manual','abono') AND date >= ? AND date < ?"
   ).all(userId, periodStart, effectiveFrom);
 
   const prevAdjs = db.prepare(
     "SELECT date, tipo, minutos FROM banco_horas_ajustes WHERE user_id=? AND date >= ? AND date < ?"
   ).all(userId, periodStart, effectiveFrom);
 
-  const meioPeriodoUser = db.prepare('SELECT meio_periodo, title FROM users WHERE id=?').get(userId);
+  const meioPeriodoUser = db.prepare('SELECT meio_periodo, no_saturday, title, sched_start_minutes, hire_date, created_at, deactivated_at FROM users WHERE id=?').get(userId);
+  const userSchedStart = meioPeriodoUser?.sched_start_minutes ?? 480;
+  // Effective "hired-from" date: when the user actually started counting time.
+  // Priority: hire_date → first batida ever → created_at (date only).
+  let firstBatidaRow = db.prepare("SELECT MIN(date) as d FROM ponto_batidas WHERE user_id=? AND deleted_at IS NULL").get(userId);
+  const userEffectiveStart = meioPeriodoUser?.hire_date
+    || firstBatidaRow?.d
+    || (meioPeriodoUser?.created_at ? meioPeriodoUser.created_at.slice(0,10) : null);
+  const userEffectiveEnd = meioPeriodoUser?.deactivated_at ? meioPeriodoUser.deactivated_at.slice(0,10) : null;
+  function isWithinEmployment(date) {
+    if (userEffectiveStart && date < userEffectiveStart) return false;
+    if (userEffectiveEnd   && date > userEffectiveEnd)   return false;
+    return true;
+  }
   function calcDailyExpected(u) {
     if (!u || !u.meio_periodo) return 480;
     const t = (u.title || '').toLowerCase();
@@ -422,45 +534,95 @@ router.get("/banco-horas", requireAuth, (req, res) => {
   ).all(userId);
   const daySchedule = {};
   for (const r of scheduleRows) daySchedule[r.dow] = r.expected_minutes;
-  const hasDaySchedule = scheduleRows.length > 0;
+  // "Does not work Saturdays" → Saturday obligation = 0 (handled uniformly by the
+  // daySchedule[6] override that every Saturday code path already respects).
+  if (meioPeriodoUser?.no_saturday) daySchedule[6] = 0;
+  const hasDaySchedule = Object.keys(daySchedule).length > 0;
+
+  // Business rule: every Saturday counts as 4h obligation in saldo (rotating schedules table
+  // is for calendar display only and does NOT affect balance calculation).
 
   const _hlRows = db.prepare(
     `SELECT date FROM holidays WHERE date >= ? AND date <= ?`
   ).all(periodStart, to);
   const _hlSet = new Set(_hlRows.map(h => h.date));
 
-  // Returns expected minutes for a day, using custom schedule when available
+  const vacRows = db.prepare(
+    "SELECT start_date, end_date FROM vacation_records WHERE user_id=? AND status='approved' AND start_date <= ? AND end_date >= ?"
+  ).all(userId, to, periodStart);
+  const vacationSet = new Set();
+  for (const v of vacRows) {
+    const vs = new Date(v.start_date + "T12:00:00Z");
+    const ve = new Date(v.end_date   + "T12:00:00Z");
+    for (let c = new Date(vs); c <= ve; c.setUTCDate(c.getUTCDate() + 1))
+      vacationSet.add(c.toISOString().slice(0, 10));
+  }
+
+  // Returns expected minutes for a day
   function getEffectiveDayExpected(dateStr, fallback) {
     if (_hlSet.has(dateStr)) return 0;
     const d = new Date(dateStr + "T12:00:00Z");
     const dow = d.getUTCDay();
     if (dow === 0) return 0;
-    if (dow === 6) return hasDaySchedule && daySchedule[6] !== undefined ? daySchedule[6] : 240;
+    if (dow === 6) {
+      return hasDaySchedule && daySchedule[6] !== undefined ? daySchedule[6] : 240; // all saturdays = 4h obligation
+    }
     if (hasDaySchedule && daySchedule[dow] !== undefined) return daySchedule[dow];
     return getDayExpected(dateStr, fallback);
   }
 
-  function sumBalance(batidasArr, adjsArr) {
+  function sumBalance(batidasArr, adjsArr, fromDate, toDate) {
     const bd = {}, ad = {};
     for (const b of batidasArr) (bd[b.date] = bd[b.date] || []).push(b);
     for (const a of adjsArr)   (ad[a.date] = ad[a.date] || []).push(a);
     const dates = new Set([...Object.keys(bd), ...Object.keys(ad)]);
+    // Include all weekdays + Saturdays in range so absent obligated days get deducted as Falta
+    if (fromDate && toDate) {
+      const cur = new Date(fromDate + "T12:00:00Z");
+      const end = new Date(toDate   + "T12:00:00Z");
+      while (cur <= end) {
+        const dw = cur.getUTCDay();
+        if (dw >= 1 && dw <= 6) dates.add(cur.toISOString().slice(0, 10));
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    }
     let total = 0;
     for (const date of dates) {
-      const w = computeWorkedMinutes(bd[date] || []);
-      const e = getEffectiveDayExpected(date, dailyExpected);
-      const adjM = (ad[date] || []).reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
-      const surplus = w - e;
-      // Cap daily banco credit at 2h (120 min); excess is paid overtime, not credited
-      const cappedSurplus = e > 0 && surplus > 120 ? 120 : surplus;
-      total += cappedSurplus + adjM;
+      const dayBs = bd[date] || [];
+      const adjM  = (ad[date] || []).reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
+      const d     = new Date(date + "T12:00:00Z");
+      const dow   = d.getUTCDay();
+      if (_hlSet.has(date) || dow === 0) { total += adjM; continue; }
+      if (vacationSet.has(date)) { total += adjM; continue; }
+      if (dow === 6) {
+        const exp = hasDaySchedule && daySchedule[6] !== undefined ? daySchedule[6] : 240;
+        if (dayBs.length === 0) {
+          if (isWithinEmployment(date)) {
+            const falta = Math.max(0, exp - abonoMinutesForDate(date));
+            total += -falta + adjM;
+          } else total += adjM;
+        } else {
+          total += computeDayDev(dayBs, exp, true, userSchedStart).balance + adjM;
+        }
+      } else {
+        const exp = getEffectiveDayExpected(date, dailyExpected);
+        if (dayBs.length === 0) {
+          if (isWithinEmployment(date)) {
+            const falta = Math.max(0, exp - abonoMinutesForDate(date));
+            total += -falta + adjM;
+          } else total += adjM;
+        } else {
+          total += computeDayDev(dayBs, exp, false, userSchedStart).balance;
+          total += adjM;
+        }
+      }
     }
     return total;
   }
 
   // Merge prev batidas with manual prev for previousBalance calc
   const prevBatidasMerged = [...prevBatidas, ...manualPrev];
-  const previousBalanceMin = sumBalance(prevBatidasMerged, prevAdjs);
+  const previousBalanceMin = sumBalance(prevBatidasMerged, prevAdjs, periodStart, effectiveFrom);
 
   // Merge main batidas with manual main
   const batidasMerged = [...batidas, ...manualMain];
@@ -475,8 +637,9 @@ router.get("/banco-horas", requireAuth, (req, res) => {
 
   const allDates = new Set([...Object.keys(batidasByDate), ...Object.keys(adjByDate)]);
   // Fill every calendar day in the range so days without batidas still appear
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const rangeEnd = to < todayIso ? to : todayIso;
+  const rangeEnd = to < yesterday() ? to : yesterday();
+  // Include vacation days so they always appear in the response
+  for (const d of vacationSet) { if (d >= effectiveFrom && d <= rangeEnd) allDates.add(d); }
   const cursor = new Date(effectiveFrom + "T12:00:00Z");
   const rangeEndDate = new Date(rangeEnd + "T12:00:00Z");
   while (cursor <= rangeEndDate) {
@@ -488,26 +651,109 @@ router.get("/banco-horas", requireAuth, (req, res) => {
   let periodBalance = 0;
   let cumulative    = previousBalanceMin;
   const days = sortedDates.map(date => {
-    const dayBatidas  = batidasByDate[date] || [];
-    const dayAdjs     = adjByDate[date]     || [];
-    const workedMin   = computeWorkedMinutes(dayBatidas);
-    const expectedMin = getEffectiveDayExpected(date, dailyExpected);
-    const diffMin     = workedMin - expectedMin;
-    const adjMin      = dayAdjs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
-    if (dayBatidas.length > 0 || dayAdjs.length > 0) {
+    const dayBatidas = batidasByDate[date] || [];
+    const dayAdjs    = adjByDate[date]     || [];
+    const adjMin     = dayAdjs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
+    const d          = new Date(date + "T12:00:00Z");
+    const dow        = d.getUTCDay();
+    const isSat      = dow === 6;
+    const isHoliday  = _hlSet.has(date);
+    const isVacation = vacationSet.has(date);
+    const isOblSat   = isSat && !isHoliday && !isVacation;
+    // Pre-compute abono coverage for this date so we can offset Falta on absent days.
+    const _abonoCover = abonoMinutesForDate(date);
+
+    let workedMin, expectedMin, diffMin, lunchMin = null, atrasoMin = 0, saMin = 0, extraMin = 0, paidOTMin = 0, faltaMin = 0, dayLabel;
+    if (isVacation && dow !== 0) {
+      workedMin   = computeDayDev(dayBatidas, 0, isSat, userSchedStart).worked;
+      expectedMin = 0;
+      diffMin     = 0;
+      dayLabel    = 'ferias';
+    } else if (isOblSat) {
+      expectedMin = getEffectiveDayExpected(date, dailyExpected);
+      if (dayBatidas.length === 0) {
+        if (!isWithinEmployment(date)) { workedMin = 0; expectedMin = 0; diffMin = 0; }
+        else {
+          // Falta = expected minus abono coverage; if abono fully covers, no Falta.
+          workedMin = 0;
+          faltaMin = Math.max(0, expectedMin - _abonoCover);
+          diffMin = -faltaMin;
+        }
+      } else {
+        const dev = computeDayDev(dayBatidas, expectedMin, true, userSchedStart);
+        workedMin = dev.worked; diffMin = dev.balance; atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
+      }
+    } else if (!isSat && dow !== 0 && !isHoliday) {
+      expectedMin = getEffectiveDayExpected(date, dailyExpected);
+      if (dayBatidas.length === 0) {
+        // Weekday with no punches: if outside employment → not obligated; otherwise Falta minus abono.
+        if (!isWithinEmployment(date)) { workedMin = 0; expectedMin = 0; diffMin = 0; }
+        else {
+          workedMin = 0;
+          faltaMin = Math.max(0, expectedMin - _abonoCover);
+          diffMin = -faltaMin;
+        }
+      } else {
+        // Dynamic expected for meio_periodo non-Designer (rotating shift):
+        //   4 punches → full day (8h with lunch); 2 punches → half day (4h)
+        let dayExpected = expectedMin;
+        let daySchedStart = userSchedStart;
+        if (meioPeriodoUser?.meio_periodo) {
+          const title = (meioPeriodoUser.title || '').toLowerCase();
+          const isDesigner = title.includes('designer') && !title.includes('doctor');
+          if (!isDesigner) {
+            if (dayBatidas.length >= 4) dayExpected = 480;
+            else dayExpected = 240;
+          }
+          // Afternoon-shift detection: if first punch is after midday → shift starts at 13:00.
+          // Applies to both N=2 (half-day afternoon) and N=4 (full afternoon→night).
+          if (dayBatidas.length === 2 || dayBatidas.length === 4) {
+            const firstMs = Math.min(...dayBatidas.map(b => b.time_millis));
+            const firstMin = new Date(firstMs).getUTCHours() * 60 + new Date(firstMs).getUTCMinutes();
+            if (firstMin >= 720) daySchedStart = 780; // 13:00 afternoon shift
+          }
+        }
+        const dev = computeDayDev(dayBatidas, dayExpected, false, daySchedStart);
+        workedMin = dev.worked; diffMin = dev.balance; lunchMin = dev.lunchMin; expectedMin = dayExpected;
+        atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
+      }
+    } else {
+      const dev = computeDayDev(dayBatidas, 0, isSat, userSchedStart);
+      workedMin = dev.worked; expectedMin = 0; diffMin = 0;
+    }
+
+    if (dayBatidas.length > 0 || dayAdjs.length > 0 || (isOblSat && expectedMin > 0) || isVacation || faltaMin > 0) {
       periodBalance += diffMin + adjMin;
       cumulative    += diffMin + adjMin;
     }
-    return { date, punchCount: dayBatidas.length, workedMin, expectedMin, diffMin, adjustmentMin: adjMin, adjustments: dayAdjs, cumulativeMin: cumulative };
+    const abonoMin = _abonoCover;
+    const dayResult = { date, punchCount: dayBatidas.length, workedMin, expectedMin, diffMin, lunchMin, atrasoMin, saMin, extraMin, paidOTMin, faltaMin, abonoMin, adjustmentMin: adjMin, adjustments: dayAdjs, cumulativeMin: cumulative };
+    if (dayLabel) dayResult.label = dayLabel;
+    return dayResult;
   });
 
   const userInfo = db.prepare("SELECT id, full_name, dept FROM users WHERE id=?").get(userId);
+  // PDF-style period buckets
+  const periodTotals = days.reduce((acc, d) => {
+    acc.worked    += d.workedMin     || 0;
+    acc.expected  += d.expectedMin   || 0;
+    acc.extras    += d.extraMin      || 0;
+    acc.paidOT    += d.paidOTMin     || 0;
+    acc.atraso    += d.atrasoMin     || 0;
+    acc.sa        += d.saMin         || 0;
+    acc.falta     += d.faltaMin      || 0;
+    acc.abono     += (d.abonoMin || 0) + (d.adjustmentMin || 0);
+    return acc;
+  }, { worked: 0, expected: 0, extras: 0, paidOT: 0, atraso: 0, sa: 0, falta: 0, abono: 0 });
+  periodTotals.extrasACompensar = periodTotals.extras - periodTotals.paidOT;
   return res.json({
     user: userInfo, dateFrom: effectiveFrom, dateTo: to, days,
     previousBalanceMin,
     periodBalanceMin:  periodBalance,
     currentBalanceMin: previousBalanceMin + periodBalance,
     totalCumulativeMin: previousBalanceMin + periodBalance,
+    schedStartMin: userSchedStart,
+    periodTotals,
     periodo: periodo ? {
       id: periodo.id, startDate: periodo.start_date, endDate: periodo.end_date,
       label: periodo.label, closed: Boolean(periodo.closed)
@@ -586,13 +832,20 @@ router.delete("/banco-horas/ajuste/:id", requireAuth, (req, res) => {
 router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   const db = getDb();
   const role = req.user.role;
-  if (!isLeader(role)) return res.status(403).json({ error: "Sem permissão" });
 
-  const todayStr = today();
+  const todayStr     = today();
+  const yesterdayStr = yesterday();
 
-  const scopedIds = isAdmin(role)
-    ? db.prepare("SELECT id FROM users WHERE active=1").all().map(u => u.id)
-    : getScopedMemberIds(db, req.user.id);
+  // Employees can call this endpoint but scoped to themselves only, so the PontoSaldoPage
+  // shows correct schedStartMin / workingSaturdayDates / dailyExpByDow for their own view.
+  let scopedIds;
+  if (isAdmin(role)) {
+    scopedIds = db.prepare("SELECT id FROM users WHERE active=1").all().map(u => u.id);
+  } else if (isLeader(role)) {
+    scopedIds = getScopedMemberIds(db, req.user.id);
+  } else {
+    scopedIds = [req.user.id];
+  }
   if (!scopedIds.length) return res.json([]);
 
   const periodo = db.prepare(
@@ -603,8 +856,9 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   const ph = scopedIds.map(() => "?").join(",");
 
   const users = db.prepare(`
-    SELECT u.id, u.full_name, u.meio_periodo, u.title,
-      g.name as group_name, g.color as group_color
+    SELECT u.id, u.full_name, u.meio_periodo, u.no_saturday, u.title, u.sched_start_minutes, u.hire_date, u.created_at, u.deactivated_at,
+      g.name as group_name, g.color as group_color,
+      (SELECT MIN(date) FROM ponto_batidas WHERE user_id=u.id AND deleted_at IS NULL) as first_batida_date
     FROM users u
     LEFT JOIN group_members gm ON gm.user_id = u.id
     LEFT JOIN groups g ON g.id = gm.group_id
@@ -616,7 +870,7 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   ).all(...scopedIds, periodStart);
 
   const allManual = db.prepare(
-    `SELECT user_id, date, CAST((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0 AS INTEGER) as time_millis
+    `SELECT user_id, date, CAST(ROUND((julianday(REPLACE(recorded_at,'Z',''))-2440587.5)*86400000.0) AS INTEGER) as time_millis
      FROM ponto_records WHERE user_id IN (${ph}) AND source IN ('manual','abono') AND date >= ?`
   ).all(...scopedIds, periodStart);
 
@@ -627,6 +881,49 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   const allSchedules = db.prepare(
     `SELECT user_id, dow, expected_minutes FROM user_day_schedule WHERE user_id IN (${ph})`
   ).all(...scopedIds);
+
+  // Saturday rotating schedules table is used only for calendar display, not balance.
+
+  // Approved abonos for all users in scope — used to offset Falta on absent days.
+  const allAbonos = db.prepare(
+    `SELECT user_id, punch_date, punch_date_to, punch_time, punch_time_to FROM abono_requests
+     WHERE user_id IN (${ph}) AND status='approved' AND COALESCE(punch_date_to, punch_date) >= ? AND punch_date <= ?`
+  ).all(...scopedIds, periodStart, todayStr);
+  const abonosByUser = {};
+  for (const a of allAbonos) {
+    (abonosByUser[a.user_id] = abonosByUser[a.user_id] || []).push(a);
+  }
+  function abonoCoverForUserDate(userId, date) {
+    const list = abonosByUser[userId] || [];
+    let total = 0;
+    for (const ab of list) {
+      const start = ab.punch_date;
+      const end   = ab.punch_date_to || ab.punch_date;
+      if (date < start || date > end) continue;
+      const dow = new Date(date + "T12:00:00Z").getUTCDay();
+      if (dow === 0) continue;
+      if (ab.punch_time && ab.punch_time_to) {
+        const [h1, m1] = ab.punch_time.split(':').map(Number);
+        const [h2, m2] = ab.punch_time_to.split(':').map(Number);
+        total += Math.max(0, (h2 * 60 + m2) - (h1 * 60 + m1));
+      } else if (!ab.punch_time) {
+        total += (dow === 6) ? 240 : 480;
+      }
+    }
+    return total;
+  }
+
+  const allVacations = db.prepare(
+    `SELECT user_id, start_date, end_date FROM vacation_records WHERE user_id IN (${ph}) AND status='approved' AND start_date <= ? AND end_date >= ?`
+  ).all(...scopedIds, todayStr, periodStart);
+  const vacByUser = {};
+  for (const v of allVacations) {
+    if (!vacByUser[v.user_id]) vacByUser[v.user_id] = new Set();
+    const vs = new Date(v.start_date + "T12:00:00Z");
+    const ve = new Date(v.end_date   + "T12:00:00Z");
+    for (let c = new Date(vs); c <= ve; c.setUTCDate(c.getUTCDate() + 1))
+      vacByUser[v.user_id].add(c.toISOString().slice(0, 10));
+  }
 
   const batidasByUser = {};
   for (const b of [...allBatidas, ...allManual]) {
@@ -656,15 +953,25 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   const results = [];
   for (const u of users) {
     const dailyExp = calcDailyExpected(u);
+    const schedStart = u.sched_start_minutes ?? 480;
     const daySched = scheduleByUser[u.id] || {};
+    // "Does not work Saturdays" → Saturday obligation = 0 (same override used everywhere).
+    if (u.no_saturday) daySched[6] = 0;
     const hasSched = Object.keys(daySched).length > 0;
+    const effStart = u.hire_date || u.first_batida_date || (u.created_at ? u.created_at.slice(0, 10) : null);
+    const effEnd   = u.deactivated_at ? u.deactivated_at.slice(0, 10) : null;
+    const withinEmp = d => (!effStart || d >= effStart) && (!effEnd || d <= effEnd);
 
+    const userVacSet   = vacByUser[u.id] || new Set();
     function effExp(dateStr) {
       if (holidaySet.has(dateStr)) return 0;
       const d = new Date(dateStr + "T12:00:00Z");
       const dow = d.getUTCDay();
       if (dow === 0) return 0;
-      if (dow === 6) return hasSched && daySched[6] !== undefined ? daySched[6] : 240;
+      if (dow === 6) {
+        // Business rule: every Saturday counts as 4h obligation regardless of rotating schedule.
+        return hasSched && daySched[6] !== undefined ? daySched[6] : 240;
+      }
       if (hasSched && daySched[dow] !== undefined) return daySched[dow];
       return getDayExpected(dateStr, dailyExp);
     }
@@ -680,29 +987,61 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
 
     const allDates = new Set([...Object.keys(bByDate), ...Object.keys(aByDate)]);
     const cursor = new Date(periodStart + "T12:00:00Z");
-    const endDate = new Date(todayStr + "T12:00:00Z");
+    const endDate = new Date(yesterdayStr + "T12:00:00Z");
     while (cursor <= endDate) {
       allDates.add(cursor.toISOString().slice(0, 10));
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
-    let balance = 0, periodExtras = 0, periodFaltas = 0, periodPaidOT = 0;
+    let balance = 0, periodExtras = 0, periodAtraso = 0, periodSA = 0, periodFalta = 0, periodAbono = 0, periodPaidOT = 0;
     for (const date of allDates) {
-      if (date === todayStr && (bByDate[date] || []).length % 2 === 1) continue;
-      const dayBs = bByDate[date] || [];
-      const dayAs = aByDate[date] || [];
-      if (dayBs.length === 0 && dayAs.length === 0) continue;
-      const worked = computeWorkedMinutes(dayBs);
-      const expected = effExp(date);
+      const dayBs  = bByDate[date] || [];
+      const dayAs  = aByDate[date] || [];
+      const dObj   = new Date(date + "T12:00:00Z");
+      const dow    = dObj.getUTCDay();
+      const isSat  = dow === 6;
+      const isHol  = holidaySet.has(date);
       const adjMin = dayAs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
-      const surplus = worked - expected;
-      const paidOT = expected > 0 && surplus > 120 ? surplus - 120 : 0;
-      // Cap daily banco credit at 2h (120 min); excess is paid overtime, not credited
-      const cappedSurplus = expected > 0 && surplus > 120 ? 120 : surplus;
-      balance += cappedSurplus + adjMin;
-      if (surplus > 0) periodExtras += surplus;
-      else if (surplus < 0 && expected > 0) periodFaltas += Math.abs(surplus);
-      periodPaidOT += paidOT;
+
+      if (dow === 0 || isHol) { if (adjMin) { balance += adjMin; periodAbono += adjMin; } continue; }
+      if (userVacSet.has(date)) { if (adjMin) { balance += adjMin; periodAbono += adjMin; } continue; }
+
+      if (isSat) {
+        const exp = hasSched && daySched[6] !== undefined ? daySched[6] : 240;
+        let satBal = 0;
+        if (dayBs.length === 0) {
+          if (withinEmp(date)) {
+            const falta = Math.max(0, exp - abonoCoverForUserDate(u.id, date));
+            satBal = -falta;
+            periodFalta += falta;
+          }
+        } else {
+          const dev = computeDayDev(dayBs, exp, true, schedStart);
+          satBal = dev.balance;
+          periodExtras += dev.extraMin;
+          periodPaidOT += dev.paidOTMin;
+          periodAtraso += dev.atrasoMin;
+          periodSA     += dev.saMin;
+        }
+        balance += satBal + adjMin;
+        if (adjMin) periodAbono += adjMin;
+      } else {
+        const exp = hasSched && daySched[dow] !== undefined ? daySched[dow] : dailyExp;
+        if (dayBs.length > 0) {
+          const dev = computeDayDev(dayBs, exp, false, schedStart);
+          balance += dev.balance;
+          periodExtras += dev.extraMin;
+          periodPaidOT += dev.paidOTMin;
+          periodAtraso += dev.atrasoMin;
+          periodSA     += dev.saMin;
+        } else if (withinEmp(date)) {
+          const falta = Math.max(0, exp - abonoCoverForUserDate(u.id, date));
+          balance -= falta;
+          periodFalta += falta;
+        }
+        balance += adjMin;
+        if (adjMin) periodAbono += adjMin;
+      }
     }
 
     const dailyExpByDow = {};
@@ -711,19 +1050,44 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
       else if (dow === 6) dailyExpByDow[dow] = daySched[6] !== undefined ? daySched[6] : 240;
       else dailyExpByDow[dow] = daySched[dow] !== undefined ? daySched[dow] : dailyExp;
     }
+    // Enumerate all obligated dates in the period (weekdays + Saturdays, excluding holidays/vacation/Sundays/pre-hire)
+    const workingSaturdayDates = [];
+    const workingWeekdayDates  = [];
+    {
+      const cur = new Date(periodStart + "T12:00:00Z");
+      const end = new Date(yesterdayStr + "T12:00:00Z");
+      while (cur <= end) {
+        const dw = cur.getUTCDay();
+        const ds = cur.toISOString().slice(0, 10);
+        if (dw !== 0 && !holidaySet.has(ds) && !userVacSet.has(ds) && withinEmp(ds)) {
+          if (dw === 6) { if (dailyExpByDow[6] > 0) workingSaturdayDates.push(ds); }
+          else          workingWeekdayDates.push(ds);
+        }
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    }
     results.push({
       userId: u.id,
       fullName: u.full_name,
       groupName: u.group_name || "Sem grupo",
       groupColor: u.group_color || "#94a3b8",
+      schedStartMin: schedStart,
       periodBalanceMin: balance,
       previousBalanceMin: 0,
       periodoStartDate: periodStart,
+      // PDF-style per-event buckets
       periodExtrasMin: periodExtras,
-      periodFaltasMin: periodFaltas,
+      periodAtrasoMin: periodAtraso,
+      periodSAMin:     periodSA,
+      periodFaltaMin:  periodFalta,
+      periodAbonoMin:  periodAbono,
+      // Backwards-compat aliases (old UI summed positive/negative day balances)
+      periodFaltasMin: periodAtraso + periodSA + periodFalta,
       periodPaidOTMin: periodPaidOT,
       periodo: periodo ? { id: periodo.id, label: periodo.label, startDate: periodo.start_date, endDate: periodo.end_date } : null,
       dailyExpByDow,
+      workingSaturdayDates,
+      workingWeekdayDates,
     });
   }
 

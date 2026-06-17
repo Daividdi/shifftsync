@@ -110,7 +110,18 @@ function AppContent() {
         0% { background-position: 200% 0; }
         16% { background-position: -130% 0; }
         100% { background-position: -130% 0; }
-      }`}
+      }
+      .ss-collapsed .ss-label,
+      .ss-collapsed .ss-hide,
+      .ss-collapsed .ss-group-header { display: none !important; }
+      .ss-collapsed .ss-group-children { display: block !important; padding-left: 0 !important; }
+      .ss-collapsed .ss-navitem {
+        justify-content: center !important;
+        gap: 0 !important;
+        padding-left: 10px !important; padding-right: 10px !important;
+        border-left-color: transparent !important;
+      }
+      .ss-collapsed .ss-logo { height: auto !important; max-width: 46px; }`}
     </style>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
       <AbsenceAlert onNavigate={setActive}/>

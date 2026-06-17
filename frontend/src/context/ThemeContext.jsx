@@ -46,8 +46,8 @@ export function ThemeProvider({ children }) {
   // Subtle accent tint on the base surfaces/borders so the chosen theme color
   // reaches the whole UI (not just the accent). Ratios are kept low to preserve
   // text contrast; text tokens (t1..t12) are never tinted.
-  const bgT = isDark ? 0.07 : 0.05;
-  const brT = isDark ? 0.14 : 0.11;
+  const bgT = isDark ? 0.10 : 0.14;
+  const brT = isDark ? 0.20 : 0.24;
   const theme = {
     ...base,
     bgApp:        mix(base.bgApp,        c, bgT),

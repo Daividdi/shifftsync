@@ -4,7 +4,7 @@ import {
   BarChart3, Clock, LogOut, GitBranch, Timer, Scale,
   ChevronDown, ChevronRight, DoorOpen, CalendarDays, FileText, Cake, Fingerprint, Umbrella,
   Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
-  Sun, Moon, Check,
+  Sun, Moon, Check, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
@@ -115,7 +115,7 @@ function NavGroup({ label, icon, children, defaultOpen = true, T }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{ marginBottom: 4 }}>
-      <button onClick={() => setOpen(v => !v)} style={{
+      <button className="ss-group-header" onClick={() => setOpen(v => !v)} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
         padding: "5px 10px", background: "transparent", border: "none",
         cursor: "pointer", color: T.t5, fontSize: 10,
@@ -132,7 +132,9 @@ function NavGroup({ label, icon, children, defaultOpen = true, T }) {
           : <ChevronRight size={11} />
         }
       </button>
-      {open && <div style={{ paddingLeft: 4 }}>{children}</div>}
+      {/* Sempre no DOM (display via inline) para que o modo recolhido possa
+          forçar a exibição dos ícones via CSS !important */}
+      <div className="ss-group-children" style={{ paddingLeft: 4, display: open ? "block" : "none" }}>{children}</div>
     </div>
   );
 }
@@ -142,7 +144,7 @@ function NavItem({ id, label, icon, active, setActive, T, badge }) {
   const isActive = active === id;
   const [hovered, setHovered] = React.useState(false);
   return (
-    <button onClick={() => setActive(id)}
+    <button className="ss-navitem" onClick={() => setActive(id)} title={label}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -159,9 +161,9 @@ function NavItem({ id, label, icon, active, setActive, T, badge }) {
         paddingLeft: isActive ? 8 : 10,
       }}>
       <span style={{ opacity: isActive ? 1 : hovered ? 0.9 : 0.8, flexShrink: 0, transition: "opacity 0.12s" }}>{icon}</span>
-      <span style={{ flex: 1 }}>{label}</span>
+      <span className="ss-label" style={{ flex: 1 }}>{label}</span>
       {badge && (
-        <span style={{
+        <span className="ss-label" style={{
           fontSize: 9, fontWeight: 700, padding: "1px 5px",
           borderRadius: 8, background: T.red + "22", color: T.red,
         }}>{badge}</span>
@@ -179,6 +181,11 @@ export default function Sidebar({ active, setActive }) {
   const isHR       = user?.role === "hr" || user?.role === "ti";
   const [isAbsent,      setIsAbsent]      = useState(false);
   const [upcomingHoliday, setUpcomingHoliday] = useState(null);
+  // Menu retrátil: recolhido (fixado) + hover para expandir (overlay, sem empurrar o conteúdo)
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("shiftsync_sidebar") === "1"; } catch { return false; } });
+  const [hover, setHover] = useState(false);
+  useEffect(() => { try { localStorage.setItem("shiftsync_sidebar", collapsed ? "1" : "0"); } catch {} }, [collapsed]);
+  const expanded = !collapsed || hover;
 
   useEffect(() => {
     if (!user) return;
@@ -210,17 +217,27 @@ export default function Sidebar({ active, setActive }) {
     }).catch(()=>{});
   }, [user]);
 
+  const RAIL = 76, FULL = 224;
   return (
     <div style={{
-      width: 224, background: T.bgSidebar, borderRight: `1px solid ${T.borderSubtle}`,
-      display: "flex", flexDirection: "column", height: "100vh", flexShrink: 0,
-      position: "sticky", top: 0, transition: "background 0.25s, border-color 0.25s",
+      width: collapsed ? RAIL : FULL, flexShrink: 0, position: "relative", height: "100vh",
+      transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
     }}>
+    <div className={expanded ? "ss-sidebar" : "ss-sidebar ss-collapsed"}
+      onMouseEnter={() => { if (collapsed) setHover(true); }}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: expanded ? FULL : RAIL, background: T.bgSidebar, borderRight: `1px solid ${T.borderSubtle}`,
+        display: "flex", flexDirection: "column", height: "100vh",
+        position: "absolute", top: 0, left: 0, zIndex: 50,
+        boxShadow: (collapsed && hover) ? "10px 0 30px rgba(0,0,0,0.30)" : "none",
+        transition: "width 0.22s cubic-bezier(0.4,0,0.2,1), background 0.25s, border-color 0.25s, box-shadow 0.2s",
+      }}>
       {/* Logo com brilho que passa periodicamente (luz mascarada pelo formato da logo) */}
       <div style={{ padding: "16px 16px 12px", borderBottom: `1px solid ${T.borderSubtle}` }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-          <div style={{ position: "relative", display: "inline-block" }}>
-            <img
+          <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
+            <img className="ss-logo"
               src={isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"}
               alt="angelTREAT"
               style={{ height: 26, width: "auto", display: "block" }}
@@ -238,7 +255,7 @@ export default function Sidebar({ active, setActive }) {
             }} />
           </div>
         </div>
-        <div style={{ textAlign: "center", fontSize: 9, color: T.t10, letterSpacing: "0.12em", fontWeight: 700, textTransform: "uppercase" }}>
+        <div className="ss-hide" style={{ textAlign: "center", fontSize: 9, color: T.t10, letterSpacing: "0.12em", fontWeight: 700, textTransform: "uppercase" }}>
           ShiftSync · Workforce Manager
         </div>
       </div>
@@ -331,12 +348,29 @@ export default function Sidebar({ active, setActive }) {
 
       {/* Footer */}
       <div style={{ padding: "10px 10px 14px", borderTop: `1px solid ${T.borderSubtle}`, display: "flex", flexDirection: "column", gap: 8 }}>
-        <ThemeToggle isDark={isDark} onToggle={toggleTheme} T={T} />
-        <AccentPicker T={T} ACCENTS={ACCENTS} accentKey={accentKey} setAccent={setAccent} />
+        {/* Botão recolher/expandir — visível mesmo no modo rail */}
+        <button className="ss-navitem" onClick={() => { setCollapsed(v => !v); setHover(false); }}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          onMouseEnter={e => { e.currentTarget.style.background = T.bgSelected; e.currentTarget.style.color = T.t3; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.t6; }}
+          style={{
+            display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "7px 10px",
+            borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", color: T.t6,
+            fontSize: 11.5, fontWeight: 600, fontFamily: "'Sora', sans-serif",
+            transition: "background 0.15s, color 0.15s",
+          }}>
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          <span className="ss-label">Recolher menu</span>
+        </button>
+
+        <div className="ss-hide" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <ThemeToggle isDark={isDark} onToggle={toggleTheme} T={T} />
+          <AccentPicker T={T} ACCENTS={ACCENTS} accentKey={accentKey} setAccent={setAccent} />
+        </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 8px", background: T.bgDeep, borderRadius: 10, border: `1px solid ${T.border}` }}>
           <Avatar name={user?.fullName} size={32} color={ROLE_COLORS[user?.role] || T.accent} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="ss-label" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user?.fullName}
             </div>
@@ -345,17 +379,20 @@ export default function Sidebar({ active, setActive }) {
               {ROLE_LABELS[user?.role] || user?.role}
             </div>
           </div>
+          {/* Sair — discreto, ao lado do nome */}
+          <button className="ss-label" onClick={logout} title="Sair"
+            onMouseEnter={e => { e.currentTarget.style.background = T.red + "1f"; e.currentTarget.style.color = T.red; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.t8; }}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, flexShrink: 0,
+              background: "transparent", border: "none", borderRadius: 8, cursor: "pointer", color: T.t8,
+              transition: "background 0.15s, color 0.15s",
+            }}>
+            <LogOut size={15} />
+          </button>
         </div>
-
-        <button onClick={logout} style={{
-          display: "flex", alignItems: "center", gap: 8, width: "100%",
-          padding: "7px 10px", background: "#FF445512", border: "1px solid #FF445530",
-          borderRadius: 7, color: "#FF7A7A", cursor: "pointer",
-          fontSize: 12, fontWeight: 600, fontFamily: "'Sora', sans-serif", transition: "background 0.15s, color 0.15s, border-color 0.15s",
-        }}>
-          <LogOut size={13} /> Sair
-        </button>
       </div>
+    </div>
     </div>
   );
 }

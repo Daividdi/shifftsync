@@ -238,8 +238,10 @@ export default function NotificationBell({ T, setActive }) {
     <div style={{ position: "relative", width: "100%" }}>
       {/* Bell button */}
       <button
+        className="ss-navitem"
         ref={buttonRef}
         onClick={handleToggle}
+        title="Notificações"
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -275,7 +277,7 @@ export default function NotificationBell({ T, setActive }) {
             </span>
           )}
         </span>
-        <span style={{ flex: 1 }}>Notificações</span>
+        <span className="ss-label" style={{ flex: 1 }}>Notificações</span>
       </button>
 
       {/* Portal — renders at document.body, always on top */}

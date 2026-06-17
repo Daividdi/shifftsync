@@ -4,6 +4,7 @@ import {
   BarChart3, Clock, LogOut, GitBranch, Timer, Scale,
   ChevronDown, ChevronRight, DoorOpen, CalendarDays, FileText, Cake, Fingerprint, Umbrella,
   Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
+  Sun, Moon, Check,
 } from "lucide-react";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
@@ -15,69 +16,96 @@ const ROLE_LABELS = { ti: "TI", hr: "RH", leader: "Líder", employee: "Funcioná
 const ROLE_COLORS = { ti: "#F59E0B", hr: "#00C2FF", leader: "#A78BFA", employee: "#34D399" };
 
 // Toggle sol/lua animado
+// Easing com leve overshoot (sensação "mola") sem biblioteca de animação
+const SPRING = "cubic-bezier(0.34, 1.45, 0.5, 1)";
+
 function ThemeToggle({ isDark, onToggle, T }) {
+  const segs = [
+    { on: !isDark, Icon: Sun,  label: "Claro"  },
+    { on:  isDark, Icon: Moon, label: "Escuro" },
+  ];
   return (
-    <button onClick={onToggle} style={{
-      display: "flex", alignItems: "center", gap: 0, width: "100%",
-      padding: "6px 8px", background: T.bgDeep, border: `1px solid ${T.border}`,
-      borderRadius: 20, cursor: "pointer", transition: "background 0.3s, border-color 0.3s",
-      position: "relative", overflow: "hidden",
-    }}>
-      {/* Track */}
-      <div style={{
-        width: "100%", height: 24, borderRadius: 12, position: "relative",
-        background: isDark ? "#1a1b2e" : "#e8f4fd", transition: "background 0.3s",
-        display: "flex", alignItems: "center", padding: "0 4px",
+    <button onClick={onToggle}
+      aria-label={isDark ? "Mudar para modo claro" : "Mudar para modo escuro"}
+      onMouseDown={e => (e.currentTarget.style.transform = "scale(0.97)")}
+      onMouseUp={e => (e.currentTarget.style.transform = "scale(1)")}
+      onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+      style={{
+        position: "relative", display: "flex", alignItems: "center", width: "100%", height: 38,
+        padding: 4, background: T.bgDeep, borderRadius: 19, border: `1px solid ${T.border}`,
+        boxShadow: `inset 0 1px 3px ${isDark ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.07)"}`,
+        cursor: "pointer", outline: "none", overflow: "hidden",
+        transition: `transform 0.18s ${SPRING}, background 0.4s ease, border-color 0.4s ease`,
       }}>
-        {/* Sol */}
-        <span style={{
-          fontSize: 14, position: "absolute", left: 5,
-          opacity: isDark ? 0.3 : 1, transition: "opacity 0.3s",
-          filter: isDark ? "grayscale(1)" : "none",
-        }}>☀️</span>
-        {/* Lua */}
-        <span style={{
-          fontSize: 13, position: "absolute", right: 5,
-          opacity: isDark ? 1 : 0.3, transition: "opacity 0.3s",
-          filter: isDark ? "none" : "grayscale(1)",
-        }}>🌙</span>
-        {/* Bolinha deslizante */}
-        <div style={{
-          width: 18, height: 18, borderRadius: "50%",
-          background: isDark ? "#A78BFA" : "#F59E0B",
-          position: "absolute",
-          left: isDark ? "calc(100% - 22px)" : 4,
-          transition: "left 0.3s cubic-bezier(.4,0,.2,1), background 0.3s",
-          boxShadow: "0 1px 4px #0004",
-        }} />
-      </div>
+      {/* Thumb deslizante com gradiente accent + brilho */}
+      <div style={{
+        position: "absolute", top: 4, left: 4, width: "calc(50% - 4px)", height: 30, borderRadius: 15,
+        background: T.accentGradient,
+        boxShadow: `0 2px 10px ${T.accent}66, 0 1px 2px rgba(0,0,0,0.25)`,
+        transform: isDark ? "translateX(100%)" : "translateX(0)",
+        transition: `transform 0.45s ${SPRING}, background 0.4s ease`,
+        willChange: "transform",
+      }} />
+      {segs.map(({ on, Icon, label }, i) => (
+        <div key={i} style={{
+          position: "relative", zIndex: 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          color: on ? "#fff" : T.t6, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.02em",
+          transition: "color 0.35s ease",
+        }}>
+          <Icon size={14} strokeWidth={2.4}
+            style={{ transform: on ? "scale(1)" : "scale(0.82)", transition: `transform 0.4s ${SPRING}` }} />
+          {label}
+        </div>
+      ))}
     </button>
   );
 }
 
-// Seletor de cor de destaque (accent) — swatches redondos
+// Seletor de cor de destaque (accent) — painel com swatches em gradiente
 function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
+  const current = ACCENTS[accentKey];
   return (
     <div style={{
-      display: "flex", alignItems: "center", justifyContent: "space-around", gap: 4,
-      padding: "7px 10px", background: T.bgDeep, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: "10px 12px 11px", background: T.bgDeep, border: `1px solid ${T.border}`, borderRadius: 16,
+      boxShadow: `inset 0 1px 2px rgba(0,0,0,0.18)`,
     }}>
-      {Object.entries(ACCENTS).map(([key, a]) => {
-        const selected = key === accentKey;
-        return (
-          <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
-            style={{
-              width: 20, height: 20, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
-              background: a.gradient || a.accent,
-              border: selected ? `2px solid ${T.t1}` : "2px solid transparent",
-              boxShadow: selected ? `0 0 0 2px ${T.bgDeep}, 0 0 8px ${a.accent}99` : "none",
-              transform: selected ? "scale(1.15)" : "scale(1)",
-              transition: "transform .15s ease, box-shadow .15s ease, border-color .15s ease",
-              outline: "none",
-            }}
-          />
-        );
-      })}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.11em", textTransform: "uppercase", color: T.t7 }}>Cor do tema</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: T.accent, transition: "color 0.4s ease" }}>{current?.label}</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        {Object.entries(ACCENTS).map(([key, a]) => {
+          const selected = key === accentKey;
+          return (
+            <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
+              onMouseEnter={e => { if (!selected) e.currentTarget.style.transform = "scale(1.13) translateY(-1px)"; }}
+              onMouseLeave={e => { if (!selected) e.currentTarget.style.transform = "scale(1)"; }}
+              style={{
+                position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
+                background: a.gradient || `linear-gradient(140deg, ${a.accent}, ${a.accentDark})`,
+                border: "none",
+                boxShadow: selected
+                  ? `0 0 0 2px ${T.bgDeep}, 0 0 0 4px ${a.accent}, 0 3px 12px ${a.accent}99`
+                  : "0 1px 3px rgba(0,0,0,0.28)",
+                transform: selected ? "scale(1.16)" : "scale(1)",
+                transition: `transform 0.32s ${SPRING}, box-shadow 0.3s ease`,
+                outline: "none", willChange: "transform",
+              }}>
+              {/* brilho glassy no topo */}
+              <span style={{
+                position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
+                background: "radial-gradient(circle at 33% 27%, rgba(255,255,255,0.55), transparent 56%)",
+              }} />
+              {selected && (
+                <Check size={12} strokeWidth={3.5} style={{
+                  position: "absolute", inset: 0, margin: "auto", color: "#fff",
+                  filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))",
+                }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

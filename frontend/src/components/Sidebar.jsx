@@ -61,63 +61,51 @@ function ThemeToggle({ isDark, onToggle, T }) {
   );
 }
 
-// Seletor de cor de destaque (accent) — painel com swatches em gradiente
+// Seletor de cor de destaque (accent) — fileira compacta de swatches, sem caixa,
+// logo abaixo do toggle Claro/Escuro para ficar visualmente conectado.
 function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
-  const current = ACCENTS[accentKey];
   return (
-    <div style={{
-      padding: "10px 12px 11px", background: T.bgDeep, border: `1px solid ${T.border}`, borderRadius: 16,
-      boxShadow: `inset 0 1px 2px rgba(0,0,0,0.18)`,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
-        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.11em", textTransform: "uppercase", color: T.t7 }}>Cor do tema</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: T.accent, transition: "color 0.4s ease" }}>{current?.label}</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        {Object.entries(ACCENTS).map(([key, a]) => {
-          const selected = key === accentKey;
-          const isPride = !!a.gradient;
-          return (
-            <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
-              onMouseEnter={e => { if (!selected) e.currentTarget.style.transform = "scale(1.13) translateY(-1px)"; }}
-              onMouseLeave={e => { if (!selected) e.currentTarget.style.transform = "scale(1)"; }}
-              style={{
-                position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
-                background: a.gradient || `linear-gradient(140deg, ${a.accent}, ${a.accentDark})`,
-                // Pride: arco-íris fluindo continuamente
-                backgroundSize: isPride ? "220% 100%" : "auto",
-                animation: isPride ? "prideFlow 3s linear infinite" : "none",
-                border: "none",
-                boxShadow: selected
-                  ? `0 0 0 2px ${T.bgDeep}, 0 0 0 4px ${a.accent}, 0 3px 12px ${a.accent}99`
-                  : "0 1px 3px rgba(0,0,0,0.28)",
-                transform: selected ? "scale(1.16)" : "scale(1)",
-                transition: `transform 0.32s ${SPRING}, box-shadow 0.3s ease`,
-                outline: "none", willChange: "transform",
-              }}>
-              {/* brilho glassy no topo */}
-              <span style={{
-                position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
-                background: "radial-gradient(circle at 33% 27%, rgba(255,255,255,0.55), transparent 56%)",
+    <div className="ss-hide" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, padding: "1px 2px" }}>
+      {Object.entries(ACCENTS).map(([key, a]) => {
+        const selected = key === accentKey;
+        const isPride = !!a.gradient;
+        return (
+          <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
+            onMouseEnter={e => { if (!selected) e.currentTarget.style.transform = "scale(1.2) translateY(-1px)"; }}
+            onMouseLeave={e => { if (!selected) e.currentTarget.style.transform = "scale(1)"; }}
+            style={{
+              position: "relative", width: 19, height: 19, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
+              background: a.gradient || `linear-gradient(140deg, ${a.accent}, ${a.accentDark})`,
+              backgroundSize: isPride ? "220% 100%" : "auto",
+              animation: isPride ? "prideFlow 3s linear infinite" : "none",
+              border: "none",
+              boxShadow: selected
+                ? `0 0 0 2px ${T.bgSidebar}, 0 0 0 3.5px ${a.accent}, 0 2px 8px ${a.accent}99`
+                : "0 1px 2px rgba(0,0,0,0.28)",
+              transform: selected ? "scale(1.2)" : "scale(1)",
+              transition: `transform 0.32s ${SPRING}, box-shadow 0.3s ease`,
+              outline: "none", willChange: "transform",
+            }}>
+            <span style={{
+              position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
+              background: "radial-gradient(circle at 33% 27%, rgba(255,255,255,0.55), transparent 56%)",
+            }} />
+            {selected && (
+              <span aria-hidden key={"ripple-" + accentKey} style={{
+                position: "absolute", inset: -2, borderRadius: "50%", pointerEvents: "none",
+                border: `2px solid ${isPride ? "#fff" : a.accent}`,
+                animation: "swatchRipple 0.55s ease-out forwards",
               }} />
-              {/* burst (anel que expande) ao selecionar — remonta via key para re-tocar */}
-              {selected && (
-                <span aria-hidden key={"ripple-" + accentKey} style={{
-                  position: "absolute", inset: -2, borderRadius: "50%", pointerEvents: "none",
-                  border: `2px solid ${isPride ? "#fff" : a.accent}`,
-                  animation: "swatchRipple 0.55s ease-out forwards",
-                }} />
-              )}
-              {selected && (
-                <Check size={12} strokeWidth={3.5} style={{
-                  position: "absolute", inset: 0, margin: "auto", color: "#fff",
-                  filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))",
-                }} />
-              )}
-            </button>
-          );
-        })}
-      </div>
+            )}
+            {selected && (
+              <Check size={10} strokeWidth={3.5} style={{
+                position: "absolute", inset: 0, margin: "auto", color: "#fff",
+                filter: "drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))",
+              }} />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -372,20 +360,20 @@ export default function Sidebar({ active, setActive }) {
 
       {/* Footer */}
       <div style={{ padding: "10px 10px 14px", borderTop: `1px solid ${T.borderSubtle}`, display: "flex", flexDirection: "column", gap: 8 }}>
-        {/* Botão recolher/expandir — visível mesmo no modo rail */}
-        <button className="ss-navitem" onClick={() => { setCollapsed(v => !v); setHover(false); }}
-          title={collapsed ? "Expandir menu" : "Recolher menu"}
-          onMouseEnter={e => { e.currentTarget.style.background = T.bgSelected; e.currentTarget.style.color = T.t3; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.t6; }}
-          style={{
-            display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "7px 10px",
-            borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", color: T.t6,
-            fontSize: 11.5, fontWeight: 600, fontFamily: "'Sora', sans-serif",
-            transition: "background 0.15s, color 0.15s",
-          }}>
-          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-          <span className="ss-label">Recolher menu</span>
-        </button>
+        {/* Recolher/expandir — apenas ícone (direita quando aberto, centro no modo rail) */}
+        <div style={{ display: "flex", justifyContent: collapsed ? "center" : "flex-end" }}>
+          <button onClick={() => { setCollapsed(v => !v); setHover(false); }}
+            title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            onMouseEnter={e => { e.currentTarget.style.background = T.bgSelected; e.currentTarget.style.color = T.accent; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.t6; }}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", width: 30, height: 30,
+              borderRadius: 8, border: "none", cursor: "pointer", background: "transparent", color: T.t6,
+              transition: "background 0.15s, color 0.15s",
+            }}>
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </div>
 
         <div className="ss-hide" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <ThemeToggle isDark={isDark} onToggle={toggleTheme} T={T} />

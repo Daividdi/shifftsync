@@ -76,6 +76,7 @@ function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         {Object.entries(ACCENTS).map(([key, a]) => {
           const selected = key === accentKey;
+          const isPride = !!a.gradient;
           return (
             <button key={key} onClick={() => setAccent(key)} title={a.label} aria-label={`Cor ${a.label}`}
               onMouseEnter={e => { if (!selected) e.currentTarget.style.transform = "scale(1.13) translateY(-1px)"; }}
@@ -83,6 +84,9 @@ function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
               style={{
                 position: "relative", width: 26, height: 26, borderRadius: "50%", cursor: "pointer", padding: 0, flexShrink: 0,
                 background: a.gradient || `linear-gradient(140deg, ${a.accent}, ${a.accentDark})`,
+                // Pride: arco-íris fluindo continuamente
+                backgroundSize: isPride ? "220% 100%" : "auto",
+                animation: isPride ? "prideFlow 3s linear infinite" : "none",
                 border: "none",
                 boxShadow: selected
                   ? `0 0 0 2px ${T.bgDeep}, 0 0 0 4px ${a.accent}, 0 3px 12px ${a.accent}99`
@@ -96,6 +100,14 @@ function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
                 position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
                 background: "radial-gradient(circle at 33% 27%, rgba(255,255,255,0.55), transparent 56%)",
               }} />
+              {/* burst (anel que expande) ao selecionar — remonta via key para re-tocar */}
+              {selected && (
+                <span aria-hidden key={"ripple-" + accentKey} style={{
+                  position: "absolute", inset: -2, borderRadius: "50%", pointerEvents: "none",
+                  border: `2px solid ${isPride ? "#fff" : a.accent}`,
+                  animation: "swatchRipple 0.55s ease-out forwards",
+                }} />
+              )}
               {selected && (
                 <Check size={12} strokeWidth={3.5} style={{
                   position: "absolute", inset: 0, margin: "auto", color: "#fff",
@@ -251,16 +263,20 @@ export default function Sidebar({ active, setActive }) {
               style={{ height: 26, width: "auto", display: "block" }}
             />
             <span aria-hidden style={{
-              position: "absolute", inset: 0, pointerEvents: "none",
+              position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none",
               WebkitMaskImage: `url(${isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"})`,
               maskImage: `url(${isDark ? "/angeltreat-logo-white.png" : "/angeltreat-logo.png"})`,
               WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat",
               WebkitMaskSize: "contain", maskSize: "contain",
               WebkitMaskPosition: "center", maskPosition: "center",
-              background: "linear-gradient(110deg, transparent 38%, rgba(255,255,255,0.9) 50%, transparent 62%)",
-              backgroundSize: "230% 100%",
-              animation: "logoShine 7s ease-in-out infinite",
-            }} />
+            }}>
+              <span style={{
+                position: "absolute", top: "-20%", bottom: "-20%", left: 0, width: "45%",
+                background: `linear-gradient(90deg, transparent, ${isDark ? T.accent : "rgba(255,255,255,0.95)"}, transparent)`,
+                animation: "logoShine 6.5s ease-in-out infinite",
+                willChange: "transform",
+              }} />
+            </span>
           </div>
         </div>
         <div className="ss-hide" style={{ textAlign: "center", fontSize: 9, color: T.t10, letterSpacing: "0.12em", fontWeight: 700, textTransform: "uppercase" }}>

@@ -107,9 +107,9 @@ function AppContent() {
     <>
     <style>{scrollbarCss}
       {`@keyframes logoShine {
-        0% { background-position: 200% 0; }
-        16% { background-position: -130% 0; }
-        100% { background-position: -130% 0; }
+        0% { transform: translateX(-160%) skewX(-12deg); }
+        18% { transform: translateX(240%) skewX(-12deg); }
+        100% { transform: translateX(240%) skewX(-12deg); }
       }
       .ss-collapsed .ss-label,
       .ss-collapsed .ss-hide,
@@ -122,7 +122,9 @@ function AppContent() {
         border-left-color: transparent !important;
       }
       .ss-collapsed .ss-logo { height: auto !important; max-width: 46px; }`}
-      {`::selection { background: ${T.accent}55; color: #fff; }`}
+      {`::selection { background: ${T.accent}55; color: #fff; }
+      @keyframes prideFlow { 0% { background-position: 0% 50%; } 100% { background-position: 220% 50%; } }
+      @keyframes swatchRipple { 0% { transform: scale(0.5); opacity: 0.85; } 100% { transform: scale(2.05); opacity: 0; } }`}
     </style>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bgApp,color:T.t1,transition:"background 0.25s"}}>
       <AbsenceAlert onNavigate={setActive}/>

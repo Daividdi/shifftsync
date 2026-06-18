@@ -277,15 +277,16 @@ export default function Sidebar({ active, setActive }) {
       {/* Setinha de recolher/expandir — borda direita, centro vertical */}
       <button onClick={() => { setCollapsed(v => !v); setHover(false); }}
         title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label="Recolher menu"
-        onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = T.accent; e.currentTarget.style.background = T.bgCard; e.currentTarget.style.borderColor = T.accent + "55"; }}
-        onMouseLeave={e => { e.currentTarget.style.opacity = "0.45"; e.currentTarget.style.color = T.t7; e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}
+        onMouseEnter={e => { e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accent + "88"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = T.t5; e.currentTarget.style.borderColor = T.border; }}
         style={{
-          position: "absolute", top: "50%", right: 3, transform: "translateY(-50%)", zIndex: 60,
-          width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
-          background: "transparent", border: "1px solid transparent", color: T.t7, opacity: 0.45, cursor: "pointer", padding: 0,
-          transition: "opacity 0.2s ease, color 0.2s ease, background 0.2s ease, border-color 0.2s ease",
+          position: "absolute", top: "50%", right: -9, transform: "translateY(-50%)", zIndex: 60,
+          width: 18, height: 18, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+          background: T.bgCard, border: `1px solid ${T.border}`, color: T.t5, cursor: "pointer",
+          boxShadow: "0 1px 5px rgba(0,0,0,0.25)", padding: 0,
+          transition: "color 0.15s, border-color 0.15s",
         }}>
-        <ChevronLeft size={13} strokeWidth={2.5} style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.3s cubic-bezier(0.34,1.4,0.5,1)" }} />
+        <ChevronLeft size={12} strokeWidth={2.5} style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.3s cubic-bezier(0.34,1.4,0.5,1)" }} />
       </button>
 
       {/* Logo com brilho que passa periodicamente (luz mascarada pelo formato da logo) */}

@@ -4,7 +4,7 @@ import {
   BarChart3, Clock, LogOut, GitBranch, Timer, Scale,
   ChevronDown, ChevronRight, DoorOpen, CalendarDays, FileText, Cake, Fingerprint, Umbrella,
   Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
-  Sun, Moon, Check, Menu, Palette,
+  Sun, Moon, Check, ChevronLeft, Palette,
 } from "lucide-react";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
@@ -31,28 +31,28 @@ function ThemeToggle({ isDark, onToggle, T }) {
       onMouseUp={e => (e.currentTarget.style.transform = "scale(1)")}
       onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
       style={{
-        position: "relative", display: "flex", alignItems: "center", width: "100%", height: 38,
-        padding: 4, background: T.bgDeep, borderRadius: 19, border: `1px solid ${T.border}`,
+        position: "relative", display: "flex", alignItems: "center", width: "100%", height: 30,
+        padding: 3, background: T.bgDeep, borderRadius: 15, border: `1px solid ${T.border}`,
         boxShadow: `inset 0 1px 3px ${isDark ? "rgba(0,0,0,0.45)" : "rgba(0,0,0,0.07)"}`,
         cursor: "pointer", outline: "none", overflow: "hidden",
         transition: `transform 0.18s ${SPRING}, background 0.4s ease, border-color 0.4s ease`,
       }}>
       {/* Thumb deslizante com gradiente accent + brilho */}
       <div style={{
-        position: "absolute", top: 4, left: 4, width: "calc(50% - 4px)", height: 30, borderRadius: 15,
+        position: "absolute", top: 3, left: 3, width: "calc(50% - 3px)", height: 22, borderRadius: 11,
         background: T.accentGradient,
-        boxShadow: `0 2px 10px ${T.accent}66, 0 1px 2px rgba(0,0,0,0.25)`,
+        boxShadow: `0 2px 8px ${T.accent}66, 0 1px 2px rgba(0,0,0,0.25)`,
         transform: isDark ? "translateX(100%)" : "translateX(0)",
         transition: `transform 0.45s ${SPRING}, background 0.4s ease`,
         willChange: "transform",
       }} />
       {segs.map(({ on, Icon, label }, i) => (
         <div key={i} style={{
-          position: "relative", zIndex: 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-          color: on ? "#fff" : T.t6, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.02em",
+          position: "relative", zIndex: 1, flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+          color: on ? "#fff" : T.t6, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.02em",
           transition: "color 0.35s ease",
         }}>
-          <Icon size={14} strokeWidth={2.4}
+          <Icon size={12} strokeWidth={2.4}
             style={{ transform: on ? "scale(1)" : "scale(0.82)", transition: `transform 0.4s ${SPRING}` }} />
           {label}
         </div>
@@ -106,15 +106,15 @@ function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
       {/* Botão pincel/paleta */}
       <button title="Cor do tema" aria-label="Cor do tema"
         style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "7px 13px", borderRadius: 11,
+          display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 9,
           border: `1px solid ${open ? T.accent + "88" : T.border}`, background: T.bgDeep, cursor: "pointer",
           color: T.accent, transition: "border-color 0.2s ease, box-shadow 0.2s ease",
           boxShadow: open ? `0 0 0 3px ${T.accent}22` : "none",
         }}>
-        <Palette size={15} />
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: T.t5 }}>Tema</span>
+        <Palette size={13} />
+        <span style={{ fontSize: 10.5, fontWeight: 600, color: T.t5 }}>Tema</span>
         <span aria-hidden style={{
-          width: 13, height: 13, borderRadius: "50%", marginLeft: 1,
+          width: 11, height: 11, borderRadius: "50%", marginLeft: 1,
           background: current?.gradient || `linear-gradient(140deg, ${current?.accent}, ${current?.accentDark})`,
           backgroundSize: current?.gradient ? "220% 100%" : "auto",
           animation: current?.gradient ? "prideFlow 3s linear infinite" : "none",
@@ -274,22 +274,23 @@ export default function Sidebar({ active, setActive }) {
       }}>
       {/* Faixa de destaque no topo — cor do tema */}
       <div aria-hidden style={{ height: 3, flexShrink: 0, background: T.accentGradient }} />
+      {/* Setinha de recolher/expandir — borda direita, centro vertical */}
+      <button onClick={() => { setCollapsed(v => !v); setHover(false); }}
+        title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label="Recolher menu"
+        onMouseEnter={e => { e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accent + "88"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = T.t5; e.currentTarget.style.borderColor = T.border; }}
+        style={{
+          position: "absolute", top: "50%", right: -11, transform: "translateY(-50%)", zIndex: 60,
+          width: 22, height: 22, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+          background: T.bgCard, border: `1px solid ${T.border}`, color: T.t5, cursor: "pointer",
+          boxShadow: "0 2px 7px rgba(0,0,0,0.28)", padding: 0,
+          transition: "color 0.15s, border-color 0.15s, transform 0.3s cubic-bezier(0.34,1.4,0.5,1)",
+        }}>
+        <ChevronLeft size={14} strokeWidth={2.5} style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.3s cubic-bezier(0.34,1.4,0.5,1)" }} />
+      </button>
+
       {/* Logo com brilho que passa periodicamente (luz mascarada pelo formato da logo) */}
-      <div style={{ padding: "12px 14px 12px", borderBottom: `1px solid ${T.borderSubtle}` }}>
-        {/* Hambúrguer — recolher/expandir o menu */}
-        <div style={{ display: "flex", justifyContent: collapsed ? "center" : "flex-start", marginBottom: 10 }}>
-          <button onClick={() => { setCollapsed(v => !v); setHover(false); }}
-            title={collapsed ? "Expandir menu" : "Recolher menu"} aria-label="Recolher menu"
-            onMouseEnter={e => { e.currentTarget.style.background = T.bgSelected; e.currentTarget.style.color = T.accent; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = T.t5; }}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34,
-              borderRadius: 9, border: "none", background: "transparent", color: T.t5, cursor: "pointer",
-              transition: "background 0.15s, color 0.15s",
-            }}>
-            <Menu size={19} />
-          </button>
-        </div>
+      <div style={{ padding: "16px 16px 12px", borderBottom: `1px solid ${T.borderSubtle}` }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
           <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
             <img className="ss-logo"

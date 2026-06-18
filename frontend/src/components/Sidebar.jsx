@@ -99,10 +99,15 @@ function Swatch({ a, selected, accentKey, onClick, T }) {
 // Seletor de cor: ícone de paleta; ao passar o mouse, abre um popover com as cores.
 function AccentPicker({ T, ACCENTS, accentKey, setAccent }) {
   const [open, setOpen] = useState(false);
+  const closeTimer = React.useRef();
   const current = ACCENTS[accentKey];
+  const openNow  = () => { clearTimeout(closeTimer.current); setOpen(true); };
+  const closeSoon = () => { closeTimer.current = setTimeout(() => setOpen(false), 180); };
   return (
     <div className="ss-hide" style={{ position: "relative", display: "flex", justifyContent: "center" }}
-      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      onMouseEnter={openNow} onMouseLeave={closeSoon}>
+      {/* Ponte invisível cobrindo o vão entre o botão e o popover (evita fechar ao cruzar) */}
+      {open && <div aria-hidden style={{ position: "absolute", left: -24, right: -24, bottom: "100%", height: 14 }} />}
       {/* Botão pincel/paleta */}
       <button title="Cor do tema" aria-label="Cor do tema"
         style={{

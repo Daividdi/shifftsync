@@ -126,9 +126,9 @@ export default function BirthdaysPage() {
 
       {/* ── Layout principal ── */}
       {!search && (
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 24, alignItems: "start" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-          {/* ── Calendário ── */}
+          {/* ── Calendário (largura total) ── */}
           <Card style={{ padding: 0, overflow: "hidden" }}>
             {/* Nav do mês */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${T.borderSubtle}` }}>
@@ -169,7 +169,7 @@ export default function BirthdaysPage() {
                   <div key={idx}
                     onClick={() => day && hasBday && setSelectedDay(isSelected ? null : day)}
                     style={{
-                      minHeight: 100, padding: "10px 8px",
+                      minHeight: 118, padding: "10px 10px",
                       borderBottom: `1px solid ${T.borderRow}`,
                       borderRight: idx % 7 !== 6 ? `1px solid ${T.borderRow}` : "none",
                       background: isSelected ? "#EC489918" : isTod ? T.accent + "0D" : "transparent",
@@ -193,20 +193,20 @@ export default function BirthdaysPage() {
                         }}>{day}</div>
                         {hasBday && (
                           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            {byDay[day].slice(0, 2).map(b => (
+                            {byDay[day].slice(0, 3).map(b => (
                               <div key={b.id} style={{
-                                display: "flex", alignItems: "center", gap: 4,
+                                display: "flex", alignItems: "center", gap: 5,
                                 background: b.isToday ? "#EC4899" : "#EC489922",
-                                borderRadius: 5, padding: "2px 6px",
+                                borderRadius: 5, padding: "2px 7px",
                               }}>
                                 <span style={{ fontSize: 9 }}>🎂</span>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: b.isToday ? "#fff" : "#EC4899", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 62 }}>
+                                <span style={{ fontSize: 10.5, fontWeight: 600, color: b.isToday ? "#fff" : "#EC4899", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>
                                   {b.fullName?.split(" ")[0]}
                                 </span>
                               </div>
                             ))}
-                            {byDay[day].length > 2 && (
-                              <div style={{ fontSize: 10, color: "#EC4899", paddingLeft: 4, fontWeight: 600 }}>+{byDay[day].length - 2}</div>
+                            {byDay[day].length > 3 && (
+                              <div style={{ fontSize: 10, color: "#EC4899", paddingLeft: 4, fontWeight: 600 }}>+{byDay[day].length - 3}</div>
                             )}
                           </div>
                         )}
@@ -218,11 +218,9 @@ export default function BirthdaysPage() {
             </div>
           </Card>
 
-          {/* ── Painel lateral ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-            {/* Dia selecionado */}
-            {selectedDay && (
+          {/* ── Detalhes do dia selecionado (abaixo do calendário) ── */}
+          {selectedDay && (
+            <div>
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <div style={{ padding: "14px 18px", background: "#EC489912", borderBottom: `1px solid #EC489928`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
@@ -236,13 +234,12 @@ export default function BirthdaysPage() {
                     <X size={14} />
                   </button>
                 </div>
-                <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ padding: "14px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
                   {selectedPeople.map(b => <BirthdayRow key={b.id} b={b} T={T} todayMMDD={todayMMDD} />)}
                 </div>
               </Card>
-            )}
-
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

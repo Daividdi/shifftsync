@@ -38,7 +38,7 @@ function AppContent() {
   const [focusGame, setFocusGame] = useState(null);
 
   React.useEffect(() => {
-    if (user?.role==="employee") setActive(a=>["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi"].includes(a)?a:"calendar");
+    if (user?.role==="employee") setActive(a=>["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","indicadores"].includes(a)?a:"calendar");
   }, [user?.role]);
 
   if (loading) return (
@@ -52,7 +52,7 @@ function AppContent() {
 
   if (!user) return <LoginPage/>;
 
-  const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game"]);
+  const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game","indicadores"]);
 
   function openGame(url, title) {
     setFocusGame({ url, title });

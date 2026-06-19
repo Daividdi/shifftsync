@@ -55,115 +55,67 @@ function trendOf(arr) {
 // by /person for the management drill-down). Returns the response object.
 function buildPersonBundle(d, inputName) {
   let name = inputName;
-  // Identity + the month we report on (latest month the person has productivity data)
-  let idn = d.prepare(
-    "SELECT group_no, job_level, MAX(snapshot_date) AS last FROM productivity WHERE designer_name=?"
-  ).get(name);
-  // Fallback: resolve the BI name when it differs slightly from full_name
-  if (!idn || !idn.last) {
-    const alt = d.prepare("SELECT DISTINCT designer_name n FROM productivity").all()
-      .map(r => r.n).find(n => nameMatch(name, n));
-    if (alt) {
-      name = alt;
-      idn = d.prepare("SELECT group_no, job_level, MAX(snapshot_date) AS last FROM productivity WHERE designer_name=?").get(name);
-    }
+  // Resolve the BI name (exact, else accent/subset match)
+  if (!d.prepare("SELECT 1 FROM productivity WHERE designer_name=? LIMIT 1").get(name)) {
+    const alt = d.prepare("SELECT DISTINCT designer_name n FROM productivity").all().map(r => r.n).find(n => nameMatch(name, n));
+    if (alt) name = alt;
   }
-  if (!idn || !idn.last) return { hasData: false, name };
+  const idn = d.prepare("SELECT group_no, job_level FROM productivity WHERE designer_name=? ORDER BY snapshot_date DESC LIMIT 1").get(name);
+  if (!idn) return { hasData: false, name };
+  const group = idn.group_no;
+  const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE designer_name=? AND quota>0 ORDER BY m").all(name).map(r => r.m);
+  if (!months.length) return { hasData: false, name };
+  const latest = months[months.length - 1];
 
-  {
-    const group = idn.group_no;
-    const month = idn.last.slice(0, 7);                       // YYYY-MM
-    const prevMonth = (() => {
-      const [y, m] = month.split("-").map(Number);
-      const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
-      return `${py}-${String(pm).padStart(2, "0")}`;
-    })();
+  const dm = (ds) => ds.slice(8, 10) + "/" + ds.slice(5, 7);
+  const MN = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const cap = (s) => s.replace(/^./, c => c.toUpperCase());
+  const trend = (arr) => trendOf(arr.map(x => Array.isArray(x) ? x[1] : (x && typeof x === "object" ? x.score : x)));
 
-    // ── Productivity (attainment / volume) ───────────────────────────────────
-    const monthAgg = (mo) => d.prepare(`
-      SELECT COUNT(*) days, SUM(completed) comp, AVG(quota) quotaDay, AVG(progress)*100 pct,
-             SUM(new_case_count) nc, SUM(mod_count) mod, SUM(refinement_count) ref
-      FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0
-    `).get(name, mo + "-%");
-    const cur = monthAgg(month), prev = monthAgg(prevMonth);
+  const aggLike = (like) => d.prepare("SELECT COUNT(*) days, SUM(completed) comp, AVG(progress)*100 pct, SUM(new_case_count) nc, SUM(mod_count) mod, SUM(refinement_count) ref FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0").get(name, like);
+  const rankLike = (like) => d.prepare("WITH r AS (SELECT designer_name, AVG(progress)*100 ap FROM productivity WHERE group_no=? AND snapshot_date LIKE ? AND quota>0 GROUP BY designer_name) SELECT AVG(ap) avg, MAX(ap) best, COUNT(*) total, (SELECT COUNT(*) FROM r WHERE ap>(SELECT ap FROM r WHERE designer_name=?))+1 rank FROM r").get(group, like, name);
+  const dailyLike = (like) => d.prepare("SELECT substr(snapshot_date,9,2) day, ROUND(progress*100) pct FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date").all(name, like).map(r => [r.day, r.pct]);
+  const weeklyProdLike = (like) => d.prepare("SELECT MIN(snapshot_date) ws, MAX(snapshot_date) we, ROUND(AVG(progress)*100) pct, COUNT(*) days FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 GROUP BY strftime('%Y-%W',snapshot_date) ORDER BY ws").all(name, like).map(r => [dm(r.ws) + "–" + dm(r.we), r.pct, r.days]);
+  const weeksLike = (like) => d.prepare("SELECT snapshot_date date, period_label label, ROUND(avg_score,2) score, COALESCE(score_qty,0) qty, COALESCE(qty_low_score,0) low, COALESCE(qty_unfit,0) unfit FROM quality_designer WHERE designer_name=? AND period_type='week' AND snapshot_date LIKE ? ORDER BY snapshot_date").all(name, like).map(r => { const m = (r.label || "").match(/\((\d{2})(\d{2})～(\d{2})(\d{2})\)/); const wk = (r.label || "").match(/w(\d+)/); return { date: r.date, week: wk ? ("S" + wk[1]) : "", range: m ? (m[2] + "/" + m[1] + "–" + m[4] + "/" + m[3]) : dm(r.date), score: r.score, qty: r.qty, low: r.low, unfit: r.unfit }; });
+  const qMonthLike = (like) => d.prepare("SELECT avg_score score, score_qty qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ? ORDER BY snapshot_date DESC LIMIT 1").get(name, like);
+  const qGroupLike = (like) => d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month' AND snapshot_date LIKE ?").get(group, like);
+  const lowAgg = (weeks) => { const total = weeks.reduce((s, w) => s + w.low, 0), totalQty = weeks.reduce((s, w) => s + w.qty, 0), totalUnfit = weeks.reduce((s, w) => s + w.unfit, 0); const wlow = weeks.filter(w => w.low > 0).length; let streak = 0; for (let i = weeks.length - 1; i >= 0; i--) { if (weeks[i].low === 0) streak++; else break; } let lastAgo = null; for (let i = weeks.length - 1, k = 0; i >= 0; i--, k++) { if (weeks[i].low > 0) { lastAgo = k; break; } } return { total, totalQty, totalUnfit, lowRatePct: totalQty ? Number((total / totalQty * 100).toFixed(1)) : 0, weeksWithLow: wlow, totalWeeks: weeks.length, streakNoLow: streak, lastLowWeeksAgo: lastAgo }; };
 
-    const dailyProd = d.prepare(`
-      SELECT substr(snapshot_date,9,2) day, ROUND(progress*100) pct
-      FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date
-    `).all(name, month + "-%").map(r => [r.day, r.pct]);
-
-    // Group comparatives + rank (this month, by avg attainment)
-    const comp = d.prepare(`
-      WITH r AS (
-        SELECT designer_name, AVG(progress)*100 ap FROM productivity
-        WHERE group_no=? AND snapshot_date LIKE ? AND quota>0 GROUP BY designer_name
-      )
-      SELECT AVG(ap) avg, MAX(ap) best, COUNT(*) total,
-             (SELECT COUNT(*) FROM r WHERE ap > (SELECT ap FROM r WHERE designer_name=?))+1 rank
-      FROM r
-    `).get(group, month + "-%", name);
-
-    // ── Quality ──────────────────────────────────────────────────────────────
-    const qMonth = (idx) => d.prepare(`
-      SELECT avg_score score, score_qty qty, prop_low_score low
-      FROM quality_designer WHERE designer_name=? AND period_type='month'
-      ORDER BY snapshot_date DESC LIMIT 1 OFFSET ?
-    `).get(name, idx);
-    const qCur = qMonth(0), qPrev = qMonth(1);
-
-    const weeklyQual = d.prepare(`
-      SELECT snapshot_date date, ROUND(avg_score,2) score, score_qty qty
-      FROM quality_designer WHERE designer_name=? AND period_type='week'
-      ORDER BY snapshot_date DESC LIMIT 12
-    `).all(name).reverse().map(r => [r.date, r.score]);
-
-    // "Sem nota baixa" — streak de semanas mais recentes com zero notas baixas.
-    // A qualidade é agregada por semana (não por caso), então a métrica é em semanas.
-    const lowWeeks = d.prepare(
-      "SELECT COALESCE(qty_low_score,0) low FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC"
-    ).all(name).map(r => r.low);
-    let streakNoLow = 0;
-    for (const lw of lowWeeks) { if (lw === 0) streakNoLow++; else break; }
-    const lastLowWeeksAgo = lowWeeks.findIndex(lw => lw > 0); // -1 = nunca
-    const cleanWeeks = lowWeeks.filter(lw => lw === 0).length;
-
-    const qComp = d.prepare(`
-      SELECT AVG(avg_score) avg, MAX(avg_score) best
-      FROM quality_designer WHERE group_no=? AND period_type='month'
-    `).get(group);
-
-    // Trend helper: compare the average of the first vs last third of a series
-    const trend = (arr) => {
-      const v = arr.map(x => x[1]).filter(x => x != null);
-      if (v.length < 3) return "flat";
-      const k = Math.max(1, Math.floor(v.length / 3));
-      const head = v.slice(0, k).reduce((a, b) => a + b, 0) / k;
-      const tail = v.slice(-k).reduce((a, b) => a + b, 0) / k;
-      const diff = tail - head;
-      return Math.abs(diff) < (Math.abs(head) * 0.02 + 0.05) ? "flat" : diff > 0 ? "up" : "down";
-    };
-
+  const monthBundle = (mo) => {
+    const like = mo + "-%", pm = prevMonthStr(mo);
+    const cur = aggLike(like), prev = aggLike(pm + "-%");
+    const comp = rankLike(like), compPrev = rankLike(pm + "-%");
+    const daily = dailyLike(like), weeklyProd = weeklyProdLike(like);
+    const qc = qMonthLike(like), qp = qMonthLike(pm + "-%"), qg = qGroupLike(like);
+    const weeks = weeksLike(like);
     return {
-      hasData: true,
-      name, group, level: idn.job_level, month,
-      attainment: {
-        pct: round(cur.pct), completed: round(cur.comp, 1), days: cur.days, quotaDay: round(cur.quotaDay, 1),
-        deltaPct: prev?.pct != null ? round(cur.pct - prev.pct) : null,
-        trend: trend(dailyProd),
-        groupAvg: round(comp.avg), groupBest: round(comp.best), rank: comp.rank, groupSize: comp.total,
-      },
-      quality: qCur ? {
-        score: round(qCur.score, 2), qty: qCur.qty, lowPct: round(qCur.low * 100),
-        delta: qPrev?.score != null ? round(qCur.score - qPrev.score, 2) : null,
-        trend: trend(weeklyQual),
-        groupAvg: round(qComp?.avg, 2), groupBest: round(qComp?.best, 2),
-        streakNoLow, cleanWeeks, totalWeeks: lowWeeks.length,
-        lastLowWeeksAgo: lastLowWeeksAgo < 0 ? null : lastLowWeeksAgo,
-      } : null,
-      cases: { new: cur.nc || 0, mod: cur.mod || 0, ref: cur.ref || 0 },
-      dailyProd, weeklyQual,
+      periodLabel: cap(MN[+mo.slice(5, 7) - 1]) + "/" + mo.slice(0, 4), monthShort: PTM[+mo.slice(5, 7) - 1], month: mo, isLatest: mo === latest,
+      attainment: { pct: round(cur.pct), deltaPct: prev && prev.pct != null ? round(cur.pct - prev.pct) : null, completed: round(cur.comp, 1), days: cur.days, groupAvg: round(comp.avg), groupBest: round(comp.best), rank: comp.rank, groupSize: comp.total, rankPrev: compPrev ? compPrev.rank : null, trend: trend(daily) },
+      quality: qc ? { score: round(qc.score, 2), qty: qc.qty, delta: qp && qp.score != null ? round(qc.score - qp.score, 2) : null, groupAvg: round(qg ? qg.avg : null, 2), groupBest: round(qg ? qg.best : null, 2), trend: trend(weeks) } : null,
+      lowScore: lowAgg(weeks), cases: { new: cur.nc || 0, mod: cur.mod || 0, ref: cur.ref || 0 },
+      dailyProd: daily, weeklyProd, weeklyLow: weeks,
     };
-  }
+  };
+
+  const recent = months.slice(-6).reverse();
+  const byMonth = {}, monthsMeta = [];
+  recent.forEach(mo => { byMonth[mo] = monthBundle(mo); monthsMeta.push({ key: mo, label: byMonth[mo].monthShort, full: byMonth[mo].periodLabel, isLatest: mo === latest }); });
+
+  const curAll = aggLike("%"), compAll = rankLike("%");
+  const monthsSeries = months.map(mo => [PTM[+mo.slice(5, 7) - 1], round(aggLike(mo + "-%").pct)]);
+  const qualityMonthly = months.map(mo => { const q = qMonthLike(mo + "-%"); const w = weeksLike(mo + "-%"); const low = w.reduce((s, x) => s + x.low, 0), unf = w.reduce((s, x) => s + x.unfit, 0); return { date: mo + "-15", range: PTM[+mo.slice(5, 7) - 1], week: "", score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0, low, unfit: unf }; }).filter(x => x.score != null);
+  const weeklyLowAll = weeksLike("%");
+  const qAll = d.prepare("SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month'").get(name);
+  const qgAll = d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month'").get(group);
+  const monthly = {
+    periodLabel: "Acumulado · " + PTM[+months[0].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
+    attainment: { pct: round(curAll.pct), deltaPct: null, completed: round(curAll.comp, 1), days: curAll.days, groupAvg: round(compAll.avg), groupBest: round(compAll.best), rank: compAll.rank, groupSize: compAll.total, rankPrev: null, trend: trend(monthsSeries) },
+    quality: qAll && qAll.score != null ? { score: round(qAll.score, 2), qty: qAll.qty, delta: null, groupAvg: round(qgAll ? qgAll.avg : null, 2), groupBest: round(qgAll ? qgAll.best : null, 2), trend: trend(qualityMonthly) } : null,
+    lowScore: lowAgg(weeklyLowAll), cases: { new: curAll.nc || 0, mod: curAll.mod || 0, ref: curAll.ref || 0 },
+    monthsSeries, qualityMonthly, weeklyLowAll,
+  };
+
+  return { hasData: true, name, group, level: idn.job_level, latest, monthsMeta, byMonth, monthly };
 }
 
 // Can `userId` (with `role`) view the indicators of `targetName`?

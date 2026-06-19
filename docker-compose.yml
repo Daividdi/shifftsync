@@ -8,6 +8,7 @@ services:
     env_file: .env
     volumes:
       - ./backend/data:/app/data
+      - bi-data:/bi-data
     networks:
       - shiftsync-net
     depends_on: []
@@ -44,3 +45,9 @@ services:
 networks:
   shiftsync-net:
     driver: bridge
+
+volumes:
+  # External: the shiftsync-bi database volume (read by Indicadores Pessoais)
+  bi-data:
+    external: true
+    name: shiftsync-bi_bi-data

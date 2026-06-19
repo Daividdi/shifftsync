@@ -45,6 +45,7 @@ app.use("/api/mural", muralRoutes);
 app.use("/api/forms", formsRoutes);
 const documentsRoutes = require("./src/routes/documents");
 app.use("/api/documents", documentsRoutes);
+app.use("/api/indicators", require("./src/routes/indicators"));
 app.use("/api/internal", require("./src/routes/internal"));
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: "Erro interno" }); });
 app.listen(PORT, () => console.log(`\n✅  ShiftSync API em http://localhost:${PORT}\n`));

@@ -31,15 +31,36 @@ function norm(s) {
 }
 const nameTokens = (s) => norm(s).split(" ").filter(Boolean);
 const subset = (a, b) => a.every(t => b.includes(t));
-// Same person across ShiftSync \u2194 BI: same normalized name, OR same first name
-// and one token-set contained in the other (e.g. "Alvaro Calzolari de Araujo"
-// \u2194 "Alvaro Calzolari"). Safe because there are no homonyms in the roster.
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 1) return 9;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+// Two name tokens are "the same" if equal, or (both reasonably long) differ by
+// a single letter \u2014 covers spelling drift like "Sousa"/"Souza", "Olveira"/"Oliveira".
+const simTok = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && lev(a, b) <= 1);
+// Same person across ShiftSync \u2194 BI. Handles: exact, accents (via norm), name
+// truncation (subset, e.g. "Alvaro Calzolari" \u2194 "...de Araujo"), and small
+// spelling differences between the two systems. Validated against the full
+// roster with zero collisions; safe because there are no homonyms.
 function nameMatch(a, b) {
   const ta = nameTokens(a), tb = nameTokens(b);
   if (!ta.length || !tb.length) return false;
   if (ta.join(" ") === tb.join(" ")) return true;
-  if (ta[0] !== tb[0]) return false;
-  return subset(ta, tb) || subset(tb, ta);
+  if (ta[0] === tb[0] && (subset(ta, tb) || subset(tb, ta))) return true;
+  // positional fuzzy: same token count, up to 2 long tokens differ by \u22641 letter
+  if (ta.length !== tb.length) return false;
+  let diffs = 0;
+  for (let i = 0; i < ta.length; i++) {
+    if (ta[i] === tb[i]) continue;
+    if (!simTok(ta[i], tb[i])) return false;
+    diffs++;
+  }
+  return diffs >= 1 && diffs <= 2;
 }
 function trendOf(arr) {
   const v = arr.filter(x => x != null);

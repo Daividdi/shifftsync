@@ -5,7 +5,7 @@ import api from "../api/client";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { Clock, Plus, X, CheckCircle, AlertCircle, ChevronDown, Filter, Download, Edit2, Trash2, LogIn, LogOut, Coffee, PlayCircle, PenLine, RefreshCw, TrendingUp, TrendingDown, Minus, Calendar } from "lucide-react";
+import { Clock, Plus, X, CheckCircle, AlertCircle, ChevronDown, Filter, Download, Edit2, Trash2, LogIn, LogOut, Coffee, PlayCircle, PenLine, RefreshCw, TrendingUp, TrendingDown, Minus, Calendar, Fingerprint } from "lucide-react";
 
 // ── Export utilities ─────────────────────────────────────
 let _logoWhiteB64p = null;
@@ -111,6 +111,14 @@ function fmtMin(min) {
   const sign = min < 0 ? "-" : min > 0 ? "+" : "";
   return `${sign}${h}h${m > 0 ? ` ${m}min` : ""}`;
 }
+function fmtAbs(min) {
+  if (!min && min !== 0) return "—";
+  const abs = Math.abs(Math.round(min));
+  if (abs === 0) return "—";
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return h > 0 ? `${h}h${m > 0 ? String(m).padStart(2,"0") : ""}` : `${m}min`;
+}
 
 function fmtHHMM(min) {
   if (min === null || min === undefined) return "—";
@@ -137,8 +145,9 @@ function fmtDate(d) {
 // ── Banco de Horas Tab ───────────────────────────────────
 function BancoHorasTab({ T, isAdmin, isLeader, selfUser }) {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const today = now.toISOString().slice(0, 10);
+  const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const today       = now.toISOString().slice(0, 10);
+  const yesterday   = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
   const selfId = selfUser?.id || "";
   const canPick = isAdmin || isLeader;
@@ -146,7 +155,7 @@ function BancoHorasTab({ T, isAdmin, isLeader, selfUser }) {
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(selfId);
   const [dateFrom, setDateFrom] = useState(monthStart);
-  const [dateTo,   setDateTo]   = useState(today);
+  const [dateTo,   setDateTo]   = useState(yesterday);
   const [data,     setData]     = useState(null);
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
@@ -612,44 +621,82 @@ function BancoHorasTab({ T, isAdmin, isLeader, selfUser }) {
       {/* Per-day table */}
       {data && data.days && data.days.length > 0 && (
         <div style={{ background: T.bgCard, border: "1px solid " + T.border, borderRadius: 12, overflow: "hidden", marginBottom: 20 }}>
+          {(() => {
+            const totals = data.periodTotals || data.days.reduce((acc, d) => {
+              acc.worked   += d.workedMin      ?? 0;
+              acc.expected += d.expectedMin    ?? 0;
+              acc.extras   += d.extraMin       ?? 0;
+              acc.paidOT   += d.paidOTMin      ?? 0;
+              acc.atraso   += d.atrasoMin      ?? 0;
+              acc.sa       += d.saMin          ?? 0;
+              acc.falta    += d.faltaMin       ?? 0;
+              acc.abono    += d.adjustmentMin  ?? 0;
+              return acc;
+            }, { worked: 0, expected: 0, extras: 0, paidOT: 0, atraso: 0, sa: 0, falta: 0, abono: 0 });
+            const finalSaldo = data.currentBalanceMin ?? 0;
+            return (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: T.bgDeep }}>
                 <th style={thStyle}>Data</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Batidas</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Trabalhado</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Esperado</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Diferença</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Ajustes</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Bat.</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Trab</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Almoço</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Exec</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Extras</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Atraso</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>SA</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Falta</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Abono</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Saldo Acum.</th>
                 {isAdmin && <th style={{ ...thStyle, textAlign: "center" }}>Ações</th>}
               </tr>
             </thead>
             <tbody>
               {data.days.map((day, i) => {
-                const diff = day.diffMin;
-                const adj  = day.adjustmentMin;
-                const cum  = day.cumulativeMin;
+                const adj     = day.adjustmentMin;
+                const cum     = day.cumulativeMin;
+                const extras  = day.extraMin  ?? 0;
+                const atraso  = day.atrasoMin ?? 0;
+                const sa      = day.saMin     ?? 0;
+                const falta   = day.faltaMin  ?? 0;
+                const abono   = (day.abonoMin ?? 0) + (adj ?? 0);
                 return (
                   <React.Fragment key={day.date}>
                     <tr style={{ background: i % 2 === 0 ? "transparent" : T.bgDeep + "55" }}>
                       <td style={{ ...tdStyle, color: T.t2, fontWeight: 500 }}>{fmtDate(day.date)}</td>
                       <td style={{ ...tdStyle, textAlign: "center", color: T.t5, fontVariantNumeric: "tabular-nums" }}>
-                        {day.punchCount}
+                        {day.punchCount || "—"}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
-                        {fmtMin(day.workedMin).replace("+", "")}
+                        {fmtAbs(day.workedMin)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", color: T.t5, fontVariantNumeric: "tabular-nums" }}>
-                        {fmtMin(day.expectedMin).replace("+", "")}
+                        {day.lunchMin != null ? fmtAbs(day.lunchMin) : "—"}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "center", fontWeight: 600, fontVariantNumeric: "tabular-nums",
-                        color: diff > 0 ? "#22c55e" : diff < 0 ? "#ef4444" : T.t5 }}>
-                        {diff > 0 ? "+" : ""}{fmtMin(diff).replace("+", diff > 0 ? "+" : "")}
+                      <td style={{ ...tdStyle, textAlign: "center", color: T.t5, fontVariantNumeric: "tabular-nums" }}>
+                        {fmtAbs(day.expectedMin)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", fontVariantNumeric: "tabular-nums",
-                        color: adj !== 0 ? (adj > 0 ? "#22c55e" : "#ef4444") : T.t5 }}>
-                        {adj !== 0 ? fmtMin(adj) : "—"}
+                        color: extras > 0 ? "#22c55e" : T.t8 }}>
+                        {fmtAbs(extras)}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontVariantNumeric: "tabular-nums",
+                        color: atraso > 0 ? "#ef4444" : T.t8 }}>
+                        {fmtAbs(atraso)}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontVariantNumeric: "tabular-nums",
+                        color: sa > 0 ? "#ef4444" : T.t8 }}>
+                        {fmtAbs(sa)}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontVariantNumeric: "tabular-nums",
+                        color: falta > 0 ? "#ef4444" : T.t8 }}>
+                        {fmtAbs(falta)}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "center", fontVariantNumeric: "tabular-nums",
+                        color: abono > 0 ? "#22c55e" : abono < 0 ? "#ef4444" : T.t8 }}
+                        title={day.abonoMin > 0 ? `Tempo abonado: ${fmtAbs(day.abonoMin)}${adj ? ` + ajuste manual ${fmtMin(adj)}` : ''}` : (adj ? `Ajuste manual ${fmtMin(adj)}` : '')}>
+                        {fmtAbs(abono)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums",
                         color: cum > 0 ? "#22c55e" : cum < 0 ? "#ef4444" : T.t5 }}>
@@ -670,7 +717,7 @@ function BancoHorasTab({ T, isAdmin, isLeader, selfUser }) {
                     </tr>
                     {day.adjustments.length > 0 && (
                       <tr style={{ background: "#f59e0b08" }}>
-                        <td colSpan={isAdmin ? 8 : 7} style={{ padding: "4px 12px 8px 32px" }}>
+                        <td colSpan={isAdmin ? 12 : 11} style={{ padding: "4px 12px 8px 32px" }}>
                           {day.adjustments.map(a => (
                             <span key={a.id} style={{ display: "inline-block", marginRight: 12, fontSize: 11,
                               color: a.tipo === "credito" ? "#22c55e" : "#ef4444" }}>
@@ -686,7 +733,26 @@ function BancoHorasTab({ T, isAdmin, isLeader, selfUser }) {
                 );
               })}
             </tbody>
+            <tfoot>
+              <tr style={{ background: T.bgDeep, borderTop: `2px solid ${T.border}` }}>
+                <td colSpan={2} style={{ ...tdStyle, fontWeight: 700, fontSize: 11, color: T.t5, textTransform: "uppercase", letterSpacing: "0.06em" }}>TOTAIS</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.worked)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", color: T.t5 }}>—</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: T.t5, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.expected)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: totals.extras > 0 ? "#22c55e" : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.extras)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: totals.atraso > 0 ? "#ef4444" : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.atraso)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: totals.sa > 0 ? "#ef4444" : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.sa)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, color: totals.falta > 0 ? "#ef4444" : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(totals.falta)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 700, fontVariantNumeric: "tabular-nums",
+                  color: totals.abono > 0 ? "#22c55e" : totals.abono < 0 ? "#ef4444" : T.t8 }}>{fmtAbs(totals.abono)}</td>
+                <td style={{ ...tdStyle, textAlign: "center", fontWeight: 800, fontVariantNumeric: "tabular-nums",
+                  color: finalSaldo > 0 ? "#22c55e" : finalSaldo < 0 ? "#ef4444" : T.t5 }}>{fmtMin(finalSaldo)}</td>
+                {isAdmin && <td style={tdStyle} />}
+              </tr>
+            </tfoot>
           </table>
+            );
+          })()}
         </div>
       )}
 
@@ -855,7 +921,7 @@ export default function PontoPage() {
   return (
     <div style={{ padding: "28px 32px", maxWidth: 1100 }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: T.t1, margin: 0, textWrap: "balance" }}>Controle de Ponto</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11, textWrap: "balance" }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Fingerprint size={18} /></span>Controle de Ponto</h1>
         <p style={{ color: T.t5, fontSize: 13, margin: "4px 0 0", textWrap: "pretty" }}>
           {user?.role === "employee" ? "Seus registros de ponto" : "Registros e banco de horas da equipe"}
         </p>

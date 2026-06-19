@@ -1043,9 +1043,8 @@ export default function FormsPage() {
           </button>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <ClipboardList size={22} color="#6366F1" />
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0 }}>{VIEW_TITLES[view]}</h1>
+            <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><ClipboardList size={18} /></span>{VIEW_TITLES[view]}</h1>
             <p style={{ color: T.t6, fontSize: 13, margin: "2px 0 0" }}>{VIEW_SUBTITLES[view]}</p>
           </div>
         </div>

@@ -275,7 +275,7 @@ export default function PlataformasPage({ onOpenGame }) {
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
           <Zap size={20} color={T.accent} />
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Zap size={18} /></span>Plataformas</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0 }}>Plataformas</h1>
         </div>
         <p style={{ color: T.t6, fontSize: 13, margin: 0 }}>Ferramentas, jogos cognitivos e avaliações</p>
       </div>

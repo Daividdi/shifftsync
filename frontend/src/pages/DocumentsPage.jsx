@@ -349,12 +349,11 @@ export default function DocumentsPage() {
   const categories = Object.keys(grouped).sort();
 
   return (
-    <div style={{ padding: "28px 32px", maxWidth: 860, margin: "0 auto", fontFamily: "'Sora', sans-serif" }}>
+    <div style={{ padding: "28px 32px", fontFamily: "'Sora', sans-serif" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <FolderOpen size={22} style={{ color: T.accent }} />
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: T.t1, textWrap: "balance" }}>Documentos</h1>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><FolderOpen size={18} /></span>Documentos</h1>
           </div>
           <div style={{ fontSize: 13, color: T.t7 }}>Políticas, procedimentos e documentos da empresa</div>
         </div>

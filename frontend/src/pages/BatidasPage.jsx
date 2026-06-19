@@ -581,7 +581,7 @@ export default function BatidasPage() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: T.t1, margin: 0 }}>Batidas de Ponto</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Clock size={18} /></span>Batidas de Ponto</h1>
           <p style={{ color: T.t5, fontSize: 13, margin: "4px 0 0" }}>
             Entradas, saídas e pausas · sync automático a cada 30min via Faceum
           </p>

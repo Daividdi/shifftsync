@@ -336,9 +336,6 @@ export default function Sidebar({ active, setActive }) {
             icon={<Cake size={15}/>} active={active} setActive={setActive} T={T} />
           <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
           <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} />
-          {(isLeader || isHR) && (
-            <NavItem id="indicadores_gestao" label="Visão de Gestão" icon={<Users2 size={15} />} active={active} setActive={setActive} T={T} />
-          )}
         </NavGroup>
 
         {/* Plataformas — todos veem */}

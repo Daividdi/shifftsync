@@ -210,6 +210,41 @@ router.get("/person", requireAuth, (req, res) => {
   catch (e) { console.error("[indicators/person]", e.message); return res.status(500).json({ error: "Falha ao calcular indicadores" }); }
 });
 
+// GET /api/indicators/team — lightweight list of people the logged-in user may
+// open in the personal-indicators page (gestor: everyone; leader: their team).
+router.get("/team", requireAuth, (req, res) => {
+  const ss = getDb();
+  const me = ss.prepare("SELECT role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.json({ canManage: false, people: [] });
+
+  let d;
+  try { d = bi(); } catch (e) { return res.json({ canManage: false, people: [] }); }
+  const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
+  if (!latRow || !latRow.m) return res.json({ canManage: false, people: [] });
+  const latest = latRow.m.slice(0, 7);
+  const desigs = d.prepare(
+    "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0 ORDER BY group_no, designer_name"
+  ).all(latest + "-%");
+
+  if (new Set(["gerencia", "hr", "ti"]).has(me.role)) {
+    return res.json({ canManage: true, scope: "gestor", people: desigs });
+  }
+  const led = ss.prepare(`
+    SELECT g.id FROM groups g WHERE g.leader_id = ?
+    UNION
+    SELECT g.id FROM groups g JOIN group_co_leaders cl ON cl.group_id = g.id WHERE cl.user_id = ?
+  `).all(req.user.id, req.user.id);
+  if (!led.length) return res.json({ canManage: false, people: [] });
+  const ids = led.map(g => g.id);
+  const ph = ids.map(() => "?").join(",");
+  const members = ss.prepare(
+    `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name != ''`
+  ).all(...ids).map(r => r.fn);
+  const people = desigs.filter(x => members.some(m => nameMatch(m, x.name)));
+  return res.json({ canManage: people.length > 0, scope: "lider", people });
+});
+
 // GET /api/indicators/overview — management view.
 // Gestor (gerencia/hr/ti) sees everyone; a leader sees the members of the
 // team(s) they lead; anyone else is denied (they only get /me).

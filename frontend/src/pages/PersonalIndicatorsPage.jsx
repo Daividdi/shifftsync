@@ -68,17 +68,27 @@ function RangeBar({ label, valueLabel, valueColor, fillPct, markerPct, scale, no
   );
 }
 
-export default function PersonalIndicatorsPage({ name, onBack }) {
+export default function PersonalIndicatorsPage() {
   const { theme: T } = useTheme();
+  const [team, setTeam] = useState(null);          // { canManage, people:[{name,grp,lvl}] }
+  const [viewName, setViewName] = useState(null);  // null => meus indicadores
   const [state, setState] = useState({ loading: true });
 
   useEffect(() => {
+    api.get("/indicators/team")
+      .then(r => setTeam(r.data))
+      .catch(() => setTeam({ canManage: false, people: [] }));
+  }, []);
+
+  useEffect(() => {
     setState({ loading: true });
-    const path = name ? `/indicators/person?name=${encodeURIComponent(name)}` : "/indicators/me";
+    const path = viewName ? `/indicators/person?name=${encodeURIComponent(viewName)}` : "/indicators/me";
     api.get(path)
       .then(r => setState({ loading: false, data: r.data }))
       .catch(e => setState({ loading: false, error: e.response?.data?.error || "Falha ao carregar" }));
-  }, [name]);
+  }, [viewName]);
+
+  const peopleByTeam = (team?.people || []).reduce((acc, p) => { (acc[p.grp] = acc[p.grp] || []).push(p); return acc; }, {});
 
   const d = state.data;
   const card = { background: `linear-gradient(180deg, ${T.bgCard}, ${T.bgDeep})`, border: `1px solid ${T.border}`, borderRadius: 18, padding: "18px 18px 16px" };
@@ -89,17 +99,31 @@ export default function PersonalIndicatorsPage({ name, onBack }) {
     <div style={{ padding: 28 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
-        <div>
-          {onBack && (
-            <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: T.bgCard, border: `1px solid ${T.border}`, color: T.t2, borderRadius: 9, padding: "6px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
-              ← Voltar à Visão de Gestão
-            </button>
-          )}
+        <div style={{ flex: 1, minWidth: 260 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
             <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={18} /></span>
-            {name ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
+            {viewName ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
           </h1>
-          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{name ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
+          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{viewName ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
+          {team?.canManage && (
+            <div style={{ marginTop: 13, display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: T.t7, fontWeight: 600 }}>Ver indicadores de:</span>
+              <select value={viewName || ""} onChange={(e) => setViewName(e.target.value || null)}
+                style={{ background: T.bgDeep, color: T.t1, border: `1px solid ${T.border}`, borderRadius: 9, padding: "8px 12px", fontSize: 13, fontWeight: 600, minWidth: 240, cursor: "pointer" }}>
+                <option value="">— Meus indicadores —</option>
+                {Object.keys(peopleByTeam).sort().map(g => (
+                  <optgroup key={g} label={g.replace("BR-ATD-", "").replace("BR-", "")}>
+                    {peopleByTeam[g].map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              {viewName && (
+                <button onClick={() => setViewName(null)} style={{ background: "transparent", border: `1px solid ${T.border}`, color: T.t6, borderRadius: 9, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  limpar
+                </button>
+              )}
+            </div>
+          )}
         </div>
         {d?.hasData && <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 13, padding: "7px 14px 7px 7px" }}>
           <div style={{ width: 40, height: 40, borderRadius: 11, background: T.accentGradient, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#06222e" }}>{initials(d.name)}</div>
@@ -114,8 +138,10 @@ export default function PersonalIndicatorsPage({ name, onBack }) {
 
       {!state.loading && d && !d.hasData && <div style={{ textAlign: "center", padding: "60px 20px", color: T.t4 }}>
         <div style={{ fontSize: 34, marginBottom: 10 }}>📊</div>
-        Ainda não há dados de produtividade/qualidade vinculados {name ? "a este colaborador" : "ao seu nome"}.<br />
-        <span style={{ fontSize: 12, color: T.t6 }}>Assim que a planilha do BI for carregada com os resultados, eles aparecem aqui.</span>
+        {team?.canManage && !viewName
+          ? <>Selecione um colaborador no seletor acima para ver os indicadores detalhados dele.</>
+          : <>Ainda não há dados de produtividade/qualidade vinculados {viewName ? "a este colaborador" : "ao seu nome"}.<br />
+            <span style={{ fontSize: 12, color: T.t6 }}>Assim que a planilha do BI for carregada com os resultados, eles aparecem aqui.</span></>}
       </div>}
 
       {!state.loading && d?.hasData && (() => {

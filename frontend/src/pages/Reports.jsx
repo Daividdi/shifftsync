@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Download, Search, Users, CheckCircle, XCircle, TrendingUp, Award, Activity, AlertTriangle, UserX, DoorOpen, Fingerprint, AlertOctagon, Clock, Umbrella, Sun, Calendar } from "lucide-react";
+import { Download, Search, Users, CheckCircle, XCircle, TrendingUp, Award, Activity, AlertTriangle, UserX, DoorOpen, Fingerprint, AlertOctagon, Clock, Umbrella, Sun, Calendar, BarChart3 } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Input, Select } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -515,7 +515,7 @@ export default function Reports() {
     <div style={{padding:28,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
-          <h1 style={{fontSize:20,fontWeight:800,color:T.t1}}>Relatórios & Analytics</h1>
+          <h1 style={{fontSize:20,fontWeight:800,color:T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><BarChart3 size={18} /></span>Relatórios & Analytics</h1>
           <p style={{color:T.t8,fontSize:13}}>Escalas, ausências, times e funcionários</p>
         </div>
 

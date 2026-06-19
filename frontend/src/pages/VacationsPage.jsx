@@ -492,7 +492,7 @@ export default function VacationsPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0 }}>Controle de Férias</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Umbrella size={18} /></span>Controle de Férias</h1>
           <p style={{ color: T.t7, fontSize: 13, margin: "4px 0 0" }}>Agendamento, aprovação e histórico de férias da equipe</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

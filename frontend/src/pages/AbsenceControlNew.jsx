@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { LogOut, LogIn, Clock, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Edit2, Check, X } from "lucide-react";
+import { LogOut, LogIn, Clock, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronUp, Edit2, Check, X, UserMinus } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Select } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -477,7 +477,7 @@ export default function AbsenceControl() {
     <div style={{padding:28,overflowY:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
-          <h1 style={{fontSize:20,fontWeight:800,color:T.t1}}>Controle de Ausências</h1>
+          <h1 style={{fontSize:20,fontWeight:800,color:T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><UserMinus size={18} /></span>Controle de Ausências</h1>
           <p style={{color:T.t8,fontSize:13,marginTop:2}}>Registre saídas · acompanhe padrões · limite de 15 min</p>
         </div>
         {flash&&(

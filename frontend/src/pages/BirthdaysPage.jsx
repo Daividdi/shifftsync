@@ -73,7 +73,7 @@ export default function BirthdaysPage() {
             <Cake size={22} color="#fff" />
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0 }}>Aniversários</h1>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Cake size={18} /></span>Aniversários</h1>
             <p style={{ color: T.t8, fontSize: 13, margin: 0 }}>
               {birthdays.length} colegas com data de nascimento cadastrada
             </p>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Plus, Trash2, BarChart2, Image, Link, X, Check, Newspaper, Pencil,
-  MessageCircle, Send, Lock, LockOpen,
+  MessageCircle, Send, Lock, LockOpen, Users,
   AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Eraser,
 } from "lucide-react";
 import { Card, Btn, Modal, Avatar } from "../components/UI";
@@ -408,32 +408,75 @@ function CommentSection({ postId, commentCount, setCommentCount, currentUser, T 
 
 // ── Poll Block ────────────────────────────────────────────────────────────────
 function PollBlock({ post, onVote, T }) {
-  const total = post.pollVotes ? post.pollVotes.reduce((a, b) => a + b, 0) : 0;
-  const voted = post.userVote !== null && post.userVote !== undefined;
+  const [openVoters, setOpenVoters] = useState(null);
+  const total        = post.pollVotes ? post.pollVotes.reduce((a, b) => a + b, 0) : 0;
+  const voted        = post.userVote !== null && post.userVote !== undefined;
+  const hasVoterData = Array.isArray(post.pollVoters);
+
+  function toggleVoters(i, e) {
+    e.stopPropagation();
+    setOpenVoters(prev => prev === i ? null : i);
+  }
+
   return (
     <div style={{ background: T.bgDeep, borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: T.t2, marginBottom: 12 }}>{post.pollQuestion}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {(post.pollOptions || []).map((opt, i) => {
-          const votes = post.pollVotes?.[i] ?? 0;
-          const pct   = total > 0 ? Math.round((votes / total) * 100) : 0;
-          const isChosen = post.userVote === i;
+          const votes      = post.pollVotes?.[i] ?? 0;
+          const pct        = total > 0 ? Math.round((votes / total) * 100) : 0;
+          const isChosen   = post.userVote === i;
+          const voters     = post.pollVoters?.[i] || [];
+          const votersOpen = openVoters === i;
           return (
-            <div key={i} onClick={() => !voted && onVote(i)}
-              style={{ position: "relative", overflow: "hidden", borderRadius: 8, border: `1px solid ${isChosen ? T.accent + "88" : T.border}`, background: isChosen ? T.accent + "14" : T.bgCard, padding: "9px 14px", cursor: voted ? "default" : "pointer", transition: "border-color 0.15s" }}>
-              {voted && <div style={{ position: "absolute", inset: 0, background: T.accent + "18", width: pct + "%", transition: "width 0.4s ease" }} />}
-              <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {isChosen && <Check size={13} style={{ color: T.accent, flexShrink: 0 }} />}
-                  <span style={{ fontSize: 13, color: T.t2, fontWeight: isChosen ? 700 : 400 }}>{opt}</span>
+            <div key={i}>
+              <div onClick={() => !voted && onVote(i)}
+                style={{ position: "relative", overflow: "hidden", borderRadius: 8, border: `1px solid ${isChosen ? T.accent + "88" : T.border}`, background: isChosen ? T.accent + "14" : T.bgCard, padding: "9px 14px", cursor: voted ? "default" : "pointer", transition: "border-color 0.15s" }}>
+                {voted && <div style={{ position: "absolute", inset: 0, background: T.accent + "18", width: pct + "%", transition: "width 0.4s ease" }} />}
+                <div style={{ position: "relative", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {isChosen && <Check size={13} style={{ color: T.accent, flexShrink: 0 }} />}
+                    <span style={{ fontSize: 13, color: T.t2, fontWeight: isChosen ? 700 : 400 }}>{opt}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    {voted && <span style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{pct}%</span>}
+                    {hasVoterData && voted && (
+                      <button onClick={e => toggleVoters(i, e)} style={{ display: "flex", alignItems: "center", gap: 4, background: votersOpen ? T.accent + "22" : T.bgControl, border: "none", borderRadius: 20, padding: "2px 8px 2px 6px", cursor: "pointer", color: votersOpen ? T.accent : T.t7, fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
+                        <Users size={11} />&nbsp;{votes}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {voted && <span style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{pct}%</span>}
               </div>
+              {hasVoterData && votersOpen && (
+                <div style={{ marginTop: 4, padding: "10px 12px", background: T.bgCard, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                  {voters.length === 0 ? (
+                    <span style={{ fontSize: 12, color: T.t9 }}>Nenhum voto ainda</span>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px" }}>
+                      {voters.map((v, idx) => (
+                        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: T.t3 }}>
+                          <div style={{ width: 20, height: 20, borderRadius: "50%", background: T.accent + "22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: T.accent, flexShrink: 0 }}>
+                            {(v.fullName || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <span>{v.fullName}</span>
+                          {v.dept && <span style={{ color: T.t9, fontSize: 10 }}>&nbsp;· {v.dept}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
-      {voted && <div style={{ fontSize: 11, color: T.t9, marginTop: 8, textAlign: "right" }}>{total} voto{total !== 1 ? "s" : ""}</div>}
+      {voted && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: T.t9 }}>{hasVoterData ? "Clique em 👥 para ver os votos" : ""}</span>
+          <span style={{ fontSize: 11, color: T.t9 }}>{total} voto{total !== 1 ? "s" : ""}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -669,7 +712,7 @@ export default function MuralPage() {
       {/* Header — full width, left-aligned */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0 }}>Mural de Avisos</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Newspaper size={18} /></span>Mural de Avisos</h1>
           <p style={{ color: T.t8, fontSize: 13, margin: "4px 0 0" }}>Comunicados e atualizações da empresa</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

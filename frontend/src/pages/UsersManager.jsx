@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, RefreshCw, Cake, Shield, ShieldOff, AlertTriangle, Clock, CalendarOff } from "lucide-react";
+import { Search, RefreshCw, Cake, Shield, ShieldOff, AlertTriangle, Clock, CalendarOff, UserCheck } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Input, Select } from "../components/UI";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
@@ -169,7 +169,7 @@ export default function UsersManager() {
     <div style={{ padding: 28, overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1 }}>Usuários (LDAP)</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><UserCheck size={18} /></span>Usuários (LDAP)</h1>
           <p style={{ color: T.t8, fontSize: 13 }}>
             Sincronizado do OU Medical Design Center · Active Directory
             {withBirthday > 0 && <span style={{ marginLeft: 10, color: "#EC4899" }}>· 🎂 {withBirthday} com aniversário</span>}

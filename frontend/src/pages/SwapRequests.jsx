@@ -215,7 +215,7 @@ export default function SwapRequests() {
     <div style={{ padding: 28, overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1 }}>Trocas de Turno</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><ArrowLeftRight size={18} /></span>Trocas de Turno</h1>
           <p style={{ color: T.t8, fontSize: 13 }}>
             {myGroups.length > 0
               ? `Gerenciando trocas de ${allManagedGroups.length} grupo${allManagedGroups.length !== 1 ? "s" : ""}`

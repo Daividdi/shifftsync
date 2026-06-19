@@ -123,7 +123,7 @@ export default function CalendarPage() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1 }}>Calendário de Escalas</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Calendar size={18} /></span>Calendário de Escalas</h1>
           <p style={{ color: T.t8, fontSize: 13 }}>
             {canEdit ? "Clique em um sábado para visualizar ou editar" : "Visualize os turnos do mês"}
           </p>

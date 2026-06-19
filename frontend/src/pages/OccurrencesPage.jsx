@@ -94,6 +94,7 @@ export default function OccurrencesPage() {
   const [reviewModal,  setReviewModal]  = useState(null);
   const [reviewNote,   setReviewNote]   = useState("");
   const [savingAbono,  setSavingAbono]  = useState(false);
+  const [editAbono,    setEditAbono]    = useState(null);
   const [abonoForm, setAbonoForm] = useState({
     userId:"", punchDate: new Date().toISOString().slice(0,10), punchDateTo:"",
     punchTime:"", punchTimeTo:"", punchType:"entrada", reason:"", justification:"",
@@ -210,8 +211,11 @@ export default function OccurrencesPage() {
   const submitAbono = async (e) => {
     e.preventDefault();
     const { userId, punchDate, punchDateTo, punchTime, punchTimeTo, punchType, reason, justification } = abonoForm;
+    const isMultiDay = !!(punchDateTo && punchDateTo !== punchDate);
     const isRange = !!(punchTime && punchTimeTo);
-    if (!userId || !punchDate || (!punchTime && !punchTimeTo) || !reason || !justification) {
+    const justificationRequired = !["Atestado Médico", "Férias"].includes(reason);
+    if (!editAbono && !userId) { showFlash("Erro: Selecione o funcionário."); return; }
+    if (!punchDate || (!isMultiDay && !punchTime && !punchTimeTo) || !reason || (justificationRequired && !justification)) {
       showFlash("Erro: Preencha todos os campos obrigatórios."); return;
     }
     if (punchDateTo && punchDateTo < punchDate) {
@@ -222,8 +226,14 @@ export default function OccurrencesPage() {
     }
     setSavingAbono(true);
     try {
-      await api.post("/occurrences/abono", abonoForm);
-      showFlash("Abono solicitado com sucesso!");
+      if (editAbono) {
+        await api.put(`/occurrences/abono/${editAbono.id}`, { punchDate, punchDateTo, punchTime, punchTimeTo, punchType, reason, justification });
+        showFlash("Abono atualizado com sucesso!");
+        setEditAbono(null);
+      } else {
+        await api.post("/occurrences/abono", abonoForm);
+        showFlash("Abono solicitado com sucesso!");
+      }
       setShowAbono(false);
       setAbonoForm({ userId:"", punchDate: new Date().toISOString().slice(0,10), punchDateTo:"", punchTime:"", punchTimeTo:"", punchType:"entrada", reason:"", justification:"" });
       fetchAbonos();
@@ -297,7 +307,7 @@ export default function OccurrencesPage() {
       {/* Header */}
       <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20}}>
         <div>
-          <h1 style={{fontSize:20, fontWeight:800, color:T.t1}}>Ocorrências & Abonos</h1>
+          <h1 style={{fontSize:20, fontWeight:800, color:T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><FileText size={18} /></span>Ocorrências & Abonos</h1>
           <p style={{color:T.t8, fontSize:13}}>Controle de faltas, atestados, férias e solicitações de abono de ponto</p>
         </div>
         <div style={{display:"flex", gap:10, alignItems:"center"}}>
@@ -381,10 +391,23 @@ export default function OccurrencesPage() {
                 </div>
               </div>
               {form.type && (
-                <div style={{marginTop:14, padding:"10px 14px", background:(TYPE_COLORS[form.type]||"#888")+"14",
-                  border:`1px solid ${TYPE_COLORS[form.type]||"#888"}33`, borderRadius:8, display:"flex", alignItems:"center", gap:8}}>
-                  <div style={{width:8, height:8, borderRadius:"50%", background:TYPE_COLORS[form.type]||"#888"}}/>
-                  <span style={{fontSize:12, color:T.t2}}>Registrando como: <strong>{form.type}</strong></span>
+                <div style={{marginTop:14, display:"flex", flexDirection:"column", gap:8}}>
+                  <div style={{padding:"10px 14px", background:(TYPE_COLORS[form.type]||"#888")+"14",
+                    border:`1px solid ${TYPE_COLORS[form.type]||"#888"}33`, borderRadius:8, display:"flex", alignItems:"center", gap:8}}>
+                    <div style={{width:8, height:8, borderRadius:"50%", background:TYPE_COLORS[form.type]||"#888"}}/>
+                    <span style={{fontSize:12, color:T.t2}}>Registrando como: <strong>{form.type}</strong></span>
+                  </div>
+                  <div style={{padding:"10px 14px", background:T.amber+"12", border:`1px solid ${T.amber}35`,
+                    borderRadius:8, display:"flex", alignItems:"center", gap:10}}>
+                    <AlertTriangle size={13} style={{color:T.amber, flexShrink:0}}/>
+                    <span style={{fontSize:12, color:T.t2, lineHeight:1.5}}>
+                      Se a ausência gerou horas ou dias que precisam ser compensados,{" "}
+                      <button onClick={()=>{setShowForm(false);setTab("abono");}}
+                        style={{background:"none", border:"none", padding:0, cursor:"pointer", color:T.accent, fontWeight:700, fontSize:12, fontFamily:"'Sora',sans-serif", textDecoration:"underline"}}>
+                        registre também em Abono de Ponto
+                      </button>
+                    </span>
+                  </div>
                 </div>
               )}
               <div style={{display:"flex", gap:10, justifyContent:"flex-end", marginTop:20}}>
@@ -496,6 +519,9 @@ export default function OccurrencesPage() {
             <Card style={{marginBottom:20, padding:0, overflow:"hidden"}}>
               {/* Date header — like TOTVS */}
               <div style={{padding:"16px 24px 12px", borderBottom:`1px solid ${T.border}`, background:T.bgDeep}}>
+                <div style={{fontSize:13, fontWeight:700, color:T.accent, marginBottom:4, letterSpacing:"0.04em"}}>
+                  {editAbono ? "EDITAR ABONO" : "NOVO ABONO"}
+                </div>
                 <div style={{fontSize:18, fontWeight:700, color:T.t1}}>
                   {abonoForm.punchDate
                     ? (abonoForm.punchDateTo && abonoForm.punchDateTo !== abonoForm.punchDate
@@ -505,13 +531,82 @@ export default function OccurrencesPage() {
                 </div>
               </div>
               <form onSubmit={submitAbono} style={{padding:24}}>
+
+                {/* ── Guia de modos ── */}
+                {!editAbono && (
+                  <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:20}}>
+                    {[
+                      {
+                        active: !!(abonoForm.punchTime && !abonoForm.punchTimeTo && !( abonoForm.punchDateTo && abonoForm.punchDateTo !== abonoForm.punchDate)),
+                        color:"#34D399",
+                        icon:"⏱",
+                        title:"Batida única",
+                        desc:"Esqueceu de bater entrada ou saída",
+                        fields:[
+                          {label:"HORA",  example:"08:03"},
+                          {label:"TIPO",  example:"Entrada  ou  Saída"},
+                        ],
+                      },
+                      {
+                        active: !!(abonoForm.punchTime && abonoForm.punchTimeTo && !( abonoForm.punchDateTo && abonoForm.punchDateTo !== abonoForm.punchDate)),
+                        color:"#60A5FA",
+                        icon:"↔",
+                        title:"Intervalo",
+                        desc:"Saiu e voltou no mesmo dia",
+                        fields:[
+                          {label:"SAÍDA",   example:"12:30"},
+                          {label:"RETORNO", example:"14:00"},
+                        ],
+                      },
+                      {
+                        active: !!(abonoForm.punchDateTo && abonoForm.punchDateTo !== abonoForm.punchDate),
+                        color:"#A78BFA",
+                        icon:"📅",
+                        title:"Período completo",
+                        desc:"Ausente por vários dias seguidos",
+                        fields:[
+                          {label:"DATA INÍCIO", example:"18/05"},
+                          {label:"DATA FIM",    example:"20/05"},
+                        ],
+                      },
+                    ].map((m,i)=>(
+                      <div key={i} style={{
+                        padding:"10px 12px", borderRadius:10,
+                        border:`1.5px solid ${m.active ? m.color : T.border}`,
+                        background: m.active ? m.color+"14" : T.bgDeep,
+                        transition:"border-color 0.2s, background 0.2s",
+                      }}>
+                        <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:5}}>
+                          <span style={{fontSize:14}}>{m.icon}</span>
+                          <span style={{fontSize:12, fontWeight:700, color: m.active ? m.color : T.t2}}>{m.title}</span>
+                        </div>
+                        <div style={{fontSize:11, color:T.t8, marginBottom:8, lineHeight:1.4}}>{m.desc}</div>
+                        <div style={{display:"flex", gap:6}}>
+                          {m.fields.map((f,j)=>(
+                            <div key={j} style={{flex:1, background:T.bgCard, borderRadius:6, padding:"4px 7px", border:`1px solid ${T.borderSubtle}`}}>
+                              <div style={{fontSize:9, color:T.t9, fontWeight:600, letterSpacing:"0.04em", marginBottom:2}}>{f.label}</div>
+                              <div style={{fontSize:10, color:T.t5, fontFamily:"'JetBrains Mono',monospace", fontWeight:600}}>{f.example}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:16, marginBottom:16}}>
                   <div>
                     <label style={labelStyle}>FUNCIONÁRIO *</label>
-                    <select value={abonoForm.userId} onChange={e=>setAFrm("userId",e.target.value)} style={inputStyle} required>
-                      <option value="">Selecione o funcionário...</option>
-                      {users.map(u=><option key={u.id} value={u.id}>{u.fullName}</option>)}
-                    </select>
+                    {editAbono ? (
+                      <div style={{...inputStyle, display:"flex", alignItems:"center", color:T.t2, fontWeight:600}}>
+                        {users.find(u=>u.id===abonoForm.userId)?.fullName || editAbono.fullName}
+                      </div>
+                    ) : (
+                      <select value={abonoForm.userId} onChange={e=>setAFrm("userId",e.target.value)} style={inputStyle} required>
+                        <option value="">Selecione o funcionário...</option>
+                        {users.map(u=><option key={u.id} value={u.id}>{u.fullName}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <label style={labelStyle}>DATA INÍCIO *</label>
@@ -519,7 +614,11 @@ export default function OccurrencesPage() {
                   </div>
                   <div>
                     <label style={labelStyle}>DATA FIM <span style={{fontWeight:400,color:T.t9}}>(opcional)</span></label>
-                    <input type="date" value={abonoForm.punchDateTo} min={abonoForm.punchDate||undefined} onChange={e=>setAFrm("punchDateTo",e.target.value)} style={inputStyle}/>
+                    <input type="date" value={abonoForm.punchDateTo} min={abonoForm.punchDate||undefined} onChange={e=>{
+                      const v=e.target.value;
+                      setAFrm("punchDateTo",v);
+                      if(v && v!==abonoForm.punchDate){setAFrm("punchTime","");setAFrm("punchTimeTo","");}
+                    }} style={inputStyle}/>
                     {abonoForm.punchDate&&abonoForm.punchDateTo&&abonoForm.punchDateTo>=abonoForm.punchDate&&(
                       <div style={{fontSize:10,color:T.t9,marginTop:4}}>
                         {(()=>{
@@ -532,42 +631,60 @@ export default function OccurrencesPage() {
                   </div>
                 </div>
 
-                {/* Hora(s) — saída + retorno opcional */}
-                <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
-                  <div>
-                    <label style={labelStyle}>{abonoForm.punchTimeTo ? "SAÍDA *" : "HORA *"}</label>
-                    <input type="time" value={abonoForm.punchTime} onChange={e=>setAFrm("punchTime",e.target.value)}
-                      style={{...inputStyle, fontSize:18, fontWeight:600, fontFamily:"'JetBrains Mono',monospace"}}/>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>RETORNO <span style={{fontWeight:400, color:T.t9}}>(opcional)</span></label>
-                    <input type="time" value={abonoForm.punchTimeTo} onChange={e=>setAFrm("punchTimeTo",e.target.value)}
-                      style={{...inputStyle, fontSize:18, fontWeight:600, fontFamily:"'JetBrains Mono',monospace"}}/>
-                  </div>
-                </div>
-                {/* Tipo — só visível quando não é range */}
-                {!abonoForm.punchTimeTo && (
-                  <div style={{display:"flex", gap:24, alignItems:"center", marginBottom:20}}>
-                    <span style={{fontSize:12, fontWeight:600, color:T.t7, letterSpacing:"0.05em"}}>TIPO</span>
-                    {["entrada","saida"].map(pt=>(
-                      <label key={pt} style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14, fontWeight:600, color:T.t2}}>
-                        <div onClick={()=>setAFrm("punchType",pt)} style={{
-                          width:20, height:20, borderRadius:"50%", border:`2px solid ${abonoForm.punchType===pt?T.accent:T.border}`,
-                          background:abonoForm.punchType===pt?T.accent:"transparent",
-                          display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
-                        }}>
-                          {abonoForm.punchType===pt && <div style={{width:8, height:8, borderRadius:"50%", background:"#fff"}}/>}
+                {/* Hora(s) — apenas para dia único */}
+                {(()=>{
+                  const isMultiDay = abonoForm.punchDateTo && abonoForm.punchDateTo !== abonoForm.punchDate;
+                  if (isMultiDay) return (
+                    <div style={{marginBottom:16, padding:"10px 14px", background:T.accent+"12", borderRadius:8, border:`1px solid ${T.accent}30`, fontSize:12, color:T.accent, fontWeight:600}}>
+                      Período de dias completos — cada dia útil do intervalo será abonado integralmente (09:00–18:00)
+                    </div>
+                  );
+                  return (<>
+                    <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
+                      <div>
+                        <label style={labelStyle}>{abonoForm.punchTimeTo ? "SAÍDA *" : "HORA *"}</label>
+                        <input type="time" value={abonoForm.punchTime} onChange={e=>setAFrm("punchTime",e.target.value)}
+                          style={{...inputStyle, fontSize:18, fontWeight:600, fontFamily:"'JetBrains Mono',monospace"}}/>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>RETORNO <span style={{fontWeight:400, color:T.t9}}>(opcional)</span></label>
+                        <input type="time" value={abonoForm.punchTimeTo} onChange={e=>setAFrm("punchTimeTo",e.target.value)}
+                          style={{...inputStyle, fontSize:18, fontWeight:600, fontFamily:"'JetBrains Mono',monospace"}}/>
+                      </div>
+                    </div>
+                    {!abonoForm.punchTimeTo && (
+                      <div style={{display:"flex", gap:24, alignItems:"center", marginBottom:20}}>
+                        <span style={{fontSize:12, fontWeight:600, color:T.t7, letterSpacing:"0.05em"}}>TIPO</span>
+                        {["entrada","saida"].map(pt=>(
+                          <label key={pt} style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:14, fontWeight:600, color:T.t2}}>
+                            <div onClick={()=>setAFrm("punchType",pt)} style={{
+                              width:20, height:20, borderRadius:"50%", border:`2px solid ${abonoForm.punchType===pt?T.accent:T.border}`,
+                              background:abonoForm.punchType===pt?T.accent:"transparent",
+                              display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", transition:"background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s",
+                            }}>
+                              {abonoForm.punchType===pt && <div style={{width:8, height:8, borderRadius:"50%", background:"#fff"}}/>}
+                            </div>
+                            {pt === "entrada" ? "Entrada" : "Saída"}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {abonoForm.punchTime && abonoForm.punchTimeTo && (()=>{
+                      const [h1,m1]=abonoForm.punchTime.split(':').map(Number);
+                      const [h2,m2]=abonoForm.punchTimeTo.split(':').map(Number);
+                      const dur=(h2*60+m2)-(h1*60+m1);
+                      const ls=h1*60+m1+240; const le=ls+60;
+                      const fmt=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+                      return (
+                        <div style={{marginBottom:16, padding:"8px 12px", background:T.accent+"12", borderRadius:8, border:`1px solid ${T.accent}30`, fontSize:12, color:T.accent}}>
+                          {dur>=300
+                            ? `Dia completo: ${abonoForm.punchTime}–${fmt(ls)} e ${fmt(le)}–${abonoForm.punchTimeTo} (almoço ${fmt(ls)}–${fmt(le)} descontado automaticamente)`
+                            : `Intervalo abonado: ${abonoForm.punchTime} → ${abonoForm.punchTimeTo}`}
                         </div>
-                        {pt === "entrada" ? "Entrada" : "Saída"}
-                      </label>
-                    ))}
-                  </div>
-                )}
-                {abonoForm.punchTime && abonoForm.punchTimeTo && (
-                  <div style={{marginBottom:16, padding:"8px 12px", background:T.accent+"12", borderRadius:8, border:`1px solid ${T.accent}30`, fontSize:12, color:T.accent}}>
-                    Intervalo abonado: {abonoForm.punchTime} → {abonoForm.punchTimeTo} (saída + retorno inseridos automaticamente)
-                  </div>
-                )}
+                      );
+                    })()}
+                  </>);
+                })()}
 
                 <div style={{marginBottom:16}}>
                   <label style={labelStyle}>MOTIVO *</label>
@@ -580,19 +697,24 @@ export default function OccurrencesPage() {
                   </div>
                 </div>
 
-                <div style={{marginBottom:20}}>
-                  <label style={labelStyle}>JUSTIFICATIVA *</label>
-                  <textarea value={abonoForm.justification} onChange={e=>setAFrm("justification",e.target.value)}
-                    placeholder="Descreva a justificativa para a inclusão desta batida..."
-                    style={{...inputStyle, minHeight:90, resize:"vertical"}} required/>
-                </div>
+                {(() => {
+                  const justifReq = !["Atestado Médico", "Férias"].includes(abonoForm.reason);
+                  return (
+                    <div style={{marginBottom:20}}>
+                      <label style={labelStyle}>JUSTIFICATIVA {justifReq ? "*" : "(opcional)"}</label>
+                      <textarea value={abonoForm.justification} onChange={e=>setAFrm("justification",e.target.value)}
+                        placeholder={justifReq ? "Descreva a justificativa para a inclusão desta batida..." : "Opcional para atestado ou férias"}
+                        style={{...inputStyle, minHeight:90, resize:"vertical"}} required={justifReq}/>
+                    </div>
+                  );
+                })()}
 
                 <div style={{display:"flex", gap:10, justifyContent:"flex-end"}}>
-                  <Btn variant="ghost" onClick={()=>{setShowAbono(false);setAbonoForm({userId:"",punchDate:new Date().toISOString().slice(0,10),punchDateTo:"",punchTime:"",punchTimeTo:"",punchType:"entrada",reason:"",justification:""});}}>
+                  <Btn variant="ghost" onClick={()=>{setShowAbono(false);setEditAbono(null);setAbonoForm({userId:"",punchDate:new Date().toISOString().slice(0,10),punchDateTo:"",punchTime:"",punchTimeTo:"",punchType:"entrada",reason:"",justification:""});}}>
                     Cancelar
                   </Btn>
                   <Btn type="submit" disabled={savingAbono} style={{background:T.accent, color:"#fff", border:"none", padding:"9px 24px", opacity:savingAbono?0.7:1}}>
-                    {savingAbono ? "Enviando..." : "Confirmar"}
+                    {savingAbono ? "Salvando..." : editAbono ? "Salvar Alterações" : "Confirmar"}
                   </Btn>
                 </div>
               </form>
@@ -673,11 +795,30 @@ export default function OccurrencesPage() {
                       {new Date(a.createdAt).toLocaleDateString("pt-BR")}
                       <div style={{marginTop:2}}>por {a.createdByName}</div>
                     </div>
-                    <div style={{display:"flex", gap:6}}>
+                    <div style={{display:"flex", gap:6, flexWrap:"wrap", justifyContent:"flex-end"}}>
                       {isAdmin(user.role) && a.status === "pending" && (
                         <button onClick={()=>{setReviewModal(a);setReviewNote("");}}
                           style={{background:T.accent+"18", border:`1px solid ${T.accent}40`, borderRadius:6, padding:"5px 10px", cursor:"pointer", color:T.accent, fontSize:11, fontWeight:600, fontFamily:"'Sora',sans-serif"}}>
                           Revisar
+                        </button>
+                      )}
+                      {(isAdmin(user.role)||(a.createdBy===user.id&&a.status==="pending"))&&(
+                        <button onClick={()=>{
+                          setEditAbono(a);
+                          setAbonoForm({
+                            userId:     a.userId,
+                            punchDate:  a.punchDate,
+                            punchDateTo: a.punchDateTo||"",
+                            punchTime:  a.punchTime||"",
+                            punchTimeTo: a.punchTimeTo||"",
+                            punchType:  a.punchType||"entrada",
+                            reason:     a.reason||"",
+                            justification: a.justification||"",
+                          });
+                          setShowAbono(true);
+                        }}
+                          style={{background:T.accent+"18", border:`1px solid ${T.accent}40`, borderRadius:6, padding:"5px 7px", cursor:"pointer", color:T.accent}}>
+                          <Edit2 size={12}/>
                         </button>
                       )}
                       {(isAdmin(user.role)||(a.createdBy===user.id&&a.status==="pending"))&&(

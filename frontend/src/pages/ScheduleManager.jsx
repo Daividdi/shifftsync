@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Zap, Check, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Zap, Check, X, GitBranch } from "lucide-react";
 import { Card, Badge, Btn } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -82,7 +82,7 @@ export default function ScheduleManager() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1 }}>Gerenciar Escalas</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><GitBranch size={18} /></span>Gerenciar Escalas</h1>
           <p style={{ color: T.t8, fontSize: 13 }}>Monte os turnos mensais de sábado</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Gauge } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
 
@@ -84,12 +85,15 @@ export default function PersonalIndicatorsPage() {
   const dot = (c) => ({ width: 7, height: 7, borderRadius: "50%", background: c, display: "inline-block" });
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, width: "100%", margin: "0 auto" }}>
+    <div style={{ padding: 28, maxWidth: 1120, width: "100%", margin: "0 auto" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
         <div>
-          <div style={{ fontSize: 21, fontWeight: 800, color: T.t1 }}>Indicadores Pessoais</div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".14em", textTransform: "uppercase", color: T.accent, marginTop: 3 }}>Seus avanços · qualidade · volume</div>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
+            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={18} /></span>
+            Indicadores Pessoais
+          </h1>
+          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0 45px" }}>Seus avanços, qualidade e volume — acompanhe e supere suas metas</p>
         </div>
         {d?.hasData && <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 13, padding: "7px 14px 7px 7px" }}>
           <div style={{ width: 40, height: 40, borderRadius: 11, background: T.accentGradient, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#06222e" }}>{initials(d.name)}</div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, ChevronLeft, ChevronRight, Trash2, Calendar, List, Clock, AlertTriangle, X } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Trash2, Calendar, List, Clock, AlertTriangle, X, DoorOpen } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Input, Select } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -40,6 +40,22 @@ function durationLabel(min) {
   if (min<60) return min+"min";
   const h=Math.floor(min/60), m=min%60;
   return m>0?`${h}h ${m}min`:`${h}h`;
+}
+
+// Calcula posição/altura (px) de um bloco para que ele preencha toda a
+// duração selecionada (do início ao fim), e não apenas a hora inicial.
+function blockPos(startTime, endTime, hourPx) {
+  const dayStart = HOURS[0];
+  const totalH = HOURS.length * hourPx; // grade vai de HOURS[0]:00 até HOURS[0]+length:00
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  let top    = (((sh - dayStart) * 60 + sm) / 60) * hourPx;
+  let bottom = (((eh - dayStart) * 60 + em) / 60) * hourPx;
+  top    = Math.max(0, Math.min(top, totalH));
+  bottom = Math.max(top, Math.min(bottom, totalH));
+  let height = Math.max(bottom - top, 22); // altura mínima legível
+  if (top + height > totalH) height = totalH - top;
+  return { top, height };
 }
 
 // Cores por usuário — geradas a partir do nome
@@ -268,55 +284,64 @@ export default function MeetingRoom() {
   };
 
   // ── Visão Semana ──
-  const WeekView = () => (
-    <div style={{overflowX:"auto"}}>
-      <div style={{minWidth:700}}>
-        {/* Header dias */}
-        <div style={{display:"grid",gridTemplateColumns:"52px repeat(5,1fr)",borderBottom:`1px solid ${T.border}`,marginBottom:0}}>
-          <div/>
-          {weekDays.map(d=>{
-            const isToday = d===today;
-            const dow = new Date(d+"T12:00:00").getDay();
-            const dayBookings = bookingsForDay(d);
-            return (
-              <div key={d} style={{padding:"8px 6px",textAlign:"center",cursor:"pointer"}} onClick={()=>{setCurrentDate(d);setView("day");}}>
-                <div style={{fontSize:10,color:T.t9,fontWeight:600}}>{WEEK_LABELS[dow].toUpperCase()}</div>
-                <div style={{fontSize:20,fontWeight:800,color:isToday?T.accent:T.t1,lineHeight:1.2,marginTop:2}}>{new Date(d+"T12:00:00").getDate()}</div>
-                {dayBookings.length>0&&<div style={{fontSize:9,color:T.t9,marginTop:2}}>{dayBookings.length} reserva{dayBookings.length>1?"s":""}</div>}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Grade de horas */}
-        {HOURS.map(h=>(
-          <div key={h} style={{display:"grid",gridTemplateColumns:"52px repeat(5,1fr)",borderBottom:`1px solid ${T.borderRow}`,minHeight:56}}>
-            <div style={{padding:"4px 8px 4px 0",textAlign:"right",fontSize:10,color:T.t10,fontFamily:"monospace",paddingTop:8}}>{String(h).padStart(2,"0")}:00</div>
+  const WeekView = () => {
+    const HOUR_H = 56;
+    const totalH = HOURS.length * HOUR_H;
+    return (
+      <div style={{overflowX:"auto"}}>
+        <div style={{minWidth:700}}>
+          {/* Header dias */}
+          <div style={{display:"grid",gridTemplateColumns:"52px repeat(5,1fr)",borderBottom:`1px solid ${T.border}`,marginBottom:0}}>
+            <div/>
             {weekDays.map(d=>{
-              const dayBks = bookingsForDay(d).filter(b=>{
-                const bh = parseInt(b.startTime.split(":")[0]);
-                const eh = parseInt(b.endTime.split(":")[0]);
-                return bh===h||(bh<h&&eh>h);
-              });
+              const isToday = d===today;
+              const dow = new Date(d+"T12:00:00").getDay();
+              const dayBookings = bookingsForDay(d);
               return (
-                <div key={d} style={{borderLeft:`1px solid ${T.borderRow}`,padding:"3px 4px",background:d===today?T.accent+"05":"transparent"}}>
-                  {dayBks.map(b=>(
-                    parseInt(b.startTime.split(":")[0])===h&&(
-                      <EventBlock key={b.id} booking={b} T={T}
-                        canDelete={b.createdBy===user.id||isAdmin(user.role)}
-                        onDelete={handleDelete}
-                        style={{marginBottom:2}}
-                      />
-                    )
-                  ))}
+                <div key={d} style={{padding:"8px 6px",textAlign:"center",cursor:"pointer"}} onClick={()=>{setCurrentDate(d);setView("day");}}>
+                  <div style={{fontSize:10,color:T.t9,fontWeight:600}}>{WEEK_LABELS[dow].toUpperCase()}</div>
+                  <div style={{fontSize:20,fontWeight:800,color:isToday?T.accent:T.t1,lineHeight:1.2,marginTop:2}}>{new Date(d+"T12:00:00").getDate()}</div>
+                  {dayBookings.length>0&&<div style={{fontSize:9,color:T.t9,marginTop:2}}>{dayBookings.length} reserva{dayBookings.length>1?"s":""}</div>}
                 </div>
               );
             })}
           </div>
-        ))}
+
+          {/* Grade de horas — blocos preenchem toda a duração reservada */}
+          <div style={{display:"grid",gridTemplateColumns:"52px repeat(5,1fr)"}}>
+            {/* Coluna de horários */}
+            <div style={{position:"relative",height:totalH}}>
+              {HOURS.map((h,i)=>(
+                <div key={h} style={{position:"absolute",top:i*HOUR_H+2,right:8,fontSize:10,color:T.t10,fontFamily:"monospace"}}>{String(h).padStart(2,"0")}:00</div>
+              ))}
+            </div>
+            {/* Colunas dos dias */}
+            {weekDays.map(d=>(
+              <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${T.borderRow}`,background:d===today?T.accent+"05":"transparent"}}>
+                {/* Linhas de hora */}
+                {HOURS.map((h,i)=>(
+                  <div key={h} style={{position:"absolute",top:i*HOUR_H,left:0,right:0,height:HOUR_H,borderBottom:`1px solid ${T.borderRow}`}}/>
+                ))}
+                {/* Reservas */}
+                {bookingsForDay(d).map(b=>{
+                  const {top,height} = blockPos(b.startTime,b.endTime,HOUR_H);
+                  return (
+                    <div key={b.id} style={{position:"absolute",top,height,left:3,right:3}}>
+                      <EventBlock booking={b} T={T}
+                        canDelete={b.createdBy===user.id||isAdmin(user.role)}
+                        onDelete={handleDelete}
+                        style={{height:"100%",boxSizing:"border-box",overflow:"hidden"}}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── Visão Dia ──
   const DayView = () => {
@@ -336,34 +361,50 @@ export default function MeetingRoom() {
             {isLeader(user.role)&&<div style={{marginTop:8,fontSize:12}}>Clique em "+ Reservar" para agendar.</div>}
           </div>
         )}
-        {HOURS.map(h=>{
-          const hBks = dayBks.filter(b=>parseInt(b.startTime.split(":")[0])===h);
+        {/* Grade de horas — blocos preenchem toda a duração reservada */}
+        {(() => {
+          const HOUR_H = 52;
+          const totalH = HOURS.length * HOUR_H;
           return (
-            <div key={h} style={{display:"grid",gridTemplateColumns:"52px 1fr",borderBottom:`1px solid ${T.borderRow}`,minHeight:52}}>
-              <div style={{padding:"8px 10px 8px 0",textAlign:"right",fontSize:10,color:T.t10,fontFamily:"monospace"}}>{String(h).padStart(2,"0")}:00</div>
-              <div style={{padding:"4px 8px",borderLeft:`1px solid ${T.borderRow}`,display:"flex",flexDirection:"column",gap:4}}>
-                {hBks.map(b=>(
-                  <div key={b.id} style={{background:userColor(b.createdBy)+"18",borderLeft:`3px solid ${userColor(b.createdBy)}`,borderRadius:6,padding:"8px 12px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{b.title}</div>
-                        <div style={{fontSize:11,color:T.t8,marginTop:2}}>{fmtTime(b.startTime)} – {fmtTime(b.endTime)} · {durationLabel(durationMin(b.startTime,b.endTime))}</div>
-                        <div style={{fontSize:11,color:T.t9}}>Agendado por {b.createdByName}</div>
-                        {b.description&&<div style={{fontSize:11,color:T.t8,marginTop:4,fontStyle:"italic"}}>"{b.description}"</div>}
-                        {b.recurrence!=="none"&&<Badge color={userColor(b.createdBy)} small style={{marginTop:4}}>{b.recurrence==="weekly"?"Semanal":"Mensal"}</Badge>}
-                      </div>
-                      {(b.createdBy===user.id||isAdmin(user.role))&&(
-                        <button onClick={()=>handleDelete(b.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.red,padding:4}}>
-                          <Trash2 size={14}/>
-                        </button>
-                      )}
-                    </div>
-                  </div>
+            <div style={{display:"grid",gridTemplateColumns:"52px 1fr"}}>
+              {/* Coluna de horários */}
+              <div style={{position:"relative",height:totalH}}>
+                {HOURS.map((h,i)=>(
+                  <div key={h} style={{position:"absolute",top:i*HOUR_H+2,right:10,fontSize:10,color:T.t10,fontFamily:"monospace"}}>{String(h).padStart(2,"0")}:00</div>
                 ))}
+              </div>
+              {/* Coluna do dia */}
+              <div style={{position:"relative",height:totalH,borderLeft:`1px solid ${T.borderRow}`}}>
+                {/* Linhas de hora */}
+                {HOURS.map((h,i)=>(
+                  <div key={h} style={{position:"absolute",top:i*HOUR_H,left:0,right:0,height:HOUR_H,borderBottom:`1px solid ${T.borderRow}`}}/>
+                ))}
+                {/* Reservas */}
+                {dayBks.map(b=>{
+                  const {top,height} = blockPos(b.startTime,b.endTime,HOUR_H);
+                  return (
+                    <div key={b.id} style={{position:"absolute",top,height,left:8,right:8,background:userColor(b.createdBy)+"18",borderLeft:`3px solid ${userColor(b.createdBy)}`,borderRadius:6,padding:"6px 12px",overflow:"hidden",boxSizing:"border-box"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{b.title}</div>
+                          <div style={{fontSize:11,color:T.t8,marginTop:2}}>{fmtTime(b.startTime)} – {fmtTime(b.endTime)} · {durationLabel(durationMin(b.startTime,b.endTime))}</div>
+                          <div style={{fontSize:11,color:T.t9}}>Agendado por {b.createdByName}</div>
+                          {b.description&&<div style={{fontSize:11,color:T.t8,marginTop:4,fontStyle:"italic"}}>"{b.description}"</div>}
+                          {b.recurrence!=="none"&&<Badge color={userColor(b.createdBy)} small style={{marginTop:4}}>{b.recurrence==="weekly"?"Semanal":"Mensal"}</Badge>}
+                        </div>
+                        {(b.createdBy===user.id||isAdmin(user.role))&&(
+                          <button onClick={()=>handleDelete(b.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.red,padding:4}}>
+                            <Trash2 size={14}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
-        })}
+        })()}
       </div>
     );
   };
@@ -416,7 +457,7 @@ export default function MeetingRoom() {
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <div>
-          <h1 style={{fontSize:20,fontWeight:800,color:T.t1}}>Sala de Reunião</h1>
+          <h1 style={{fontSize:20,fontWeight:800,color:T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><DoorOpen size={18} /></span>Sala de Reunião</h1>
           <p style={{color:T.t8,fontSize:13}}>Calendário compartilhado · conflitos detectados automaticamente</p>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>

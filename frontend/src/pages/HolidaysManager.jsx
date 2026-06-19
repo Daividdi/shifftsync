@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Edit2, Check, X, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, X, AlertTriangle, CalendarDays } from "lucide-react";
 import { Card, Badge, Btn } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -105,7 +105,7 @@ const handleAdd = async () => {
       {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
         <div>
-          <h1 style={{fontSize:20,fontWeight:800,color:T.t1}}>Feriados</h1>
+          <h1 style={{fontSize:20,fontWeight:800,color:T.t1, display: "flex", alignItems: "center", gap: 11 }}><span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><CalendarDays size={18} /></span>Feriados</h1>
           <p style={{color:T.t8,fontSize:13,marginTop:2}}>Nacionais · Estaduais MG · Municipais Muriaé</p>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>

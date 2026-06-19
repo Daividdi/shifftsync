@@ -6,7 +6,6 @@ import {
   Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
   Sun, Moon, Check, ChevronLeft, Palette, Gauge,
 } from "lucide-react";
-import PersonalIndicatorsModal from "../pages/PersonalIndicatorsModal";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -219,7 +218,6 @@ function NavItem({ id, label, icon, active, setActive, T, badge, onClick }) {
 
 export default function Sidebar({ active, setActive }) {
   const { user, logout } = useAuth();
-  const [indOpen, setIndOpen] = useState(false);
   const { theme: T, isDark, toggleTheme, accentKey, setAccent, ACCENTS } = useTheme();
 
   const isAdmin  = user?.role === "ti" || user?.role === "hr";
@@ -265,8 +263,6 @@ export default function Sidebar({ active, setActive }) {
 
   const RAIL = 76, FULL = 224;
   return (
-    <>
-    <PersonalIndicatorsModal open={indOpen} onClose={() => setIndOpen(false)} />
     <div style={{
       width: collapsed ? RAIL : FULL, flexShrink: 0, position: "relative", height: "100vh",
       transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
@@ -339,7 +335,7 @@ export default function Sidebar({ active, setActive }) {
             icon={<Cake size={15}/>} active={active} setActive={setActive} T={T} />
           <NotificationBell T={T} setActive={setActive} />
           <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
-          <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} onClick={() => setIndOpen(true)} />
+          <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} />
         </NavGroup>
 
         {/* Plataformas — todos veem */}
@@ -449,6 +445,5 @@ export default function Sidebar({ active, setActive }) {
       </div>
     </div>
     </div>
-    </>
   );
 }

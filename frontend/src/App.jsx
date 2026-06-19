@@ -23,6 +23,7 @@ import MuralPage from "./pages/MuralPage";
 import FormsPage from "./pages/FormsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import BIPage from "./pages/BIPage";
+import PersonalIndicatorsPage from "./pages/PersonalIndicatorsPage";
 import PlataformasPage from "./pages/PlataformasPage";
 import FocusGamePage from "./pages/FocusGamePage";
 import { GameTimerProvider } from "./context/GameTimerContext";
@@ -82,6 +83,7 @@ function AppContent() {
       case "forms":       return <FormsPage/>;
       case "documents":   return <DocumentsPage/>;
       case "bi":          return <BIPage/>;
+      case "indicadores": return <PersonalIndicatorsPage/>;
       case "plataformas": return <PlataformasPage onOpenGame={openGame}/>;
       case "focus-game":  return <FocusGamePage url={focusGame?.url} title={focusGame?.title} onBack={() => setActive("plataformas")}/>;
       default:            return <CalendarPage/>;

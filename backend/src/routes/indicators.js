@@ -18,6 +18,27 @@ function bi() {
 
 const round = (v, d = 0) => (v == null ? null : Number(v.toFixed(d)));
 
+const PTM = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+function prevMonthStr(mo) {
+  const [y, m] = mo.split("-").map(Number);
+  const pm = m === 1 ? 12 : m - 1, py = m === 1 ? y - 1 : y;
+  return `${py}-${String(pm).padStart(2, "0")}`;
+}
+// Normalize names for matching ShiftSync full_name ↔ BI designer_name
+// (accents/casing/whitespace differ between the two sources).
+function norm(s) {
+  return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+function trendOf(arr) {
+  const v = arr.filter(x => x != null);
+  if (v.length < 3) return "flat";
+  const k = Math.max(1, Math.floor(v.length / 3));
+  const h = v.slice(0, k).reduce((a, b) => a + b, 0) / k;
+  const t = v.slice(-k).reduce((a, b) => a + b, 0) / k;
+  const df = t - h;
+  return Math.abs(df) < (Math.abs(h) * 0.02 + 0.05) ? "flat" : df > 0 ? "up" : "down";
+}
+
 // GET /api/indicators/me — personal indicators for the logged-in user only.
 router.get("/me", requireAuth, (req, res) => {
   const user = getDb().prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id);
@@ -129,6 +150,103 @@ router.get("/me", requireAuth, (req, res) => {
   } catch (e) {
     console.error("[indicators]", e.message);
     res.status(500).json({ error: "Falha ao calcular indicadores" });
+  }
+});
+
+// GET /api/indicators/overview — management view.
+// Gestor (gerencia/hr/ti) sees everyone; a leader sees the members of the
+// team(s) they lead; anyone else is denied (they only get /me).
+router.get("/overview", requireAuth, (req, res) => {
+  const ss = getDb();
+  const me = ss.prepare("SELECT id, full_name, role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
+
+  const GESTOR = new Set(["gerencia", "hr", "ti"]);
+  let scope, scopeLabel, names = null;
+
+  if (GESTOR.has(me.role)) {
+    scope = "gestor";
+    scopeLabel = "Todas as equipes";
+  } else {
+    // Teams the user leads (as leader or co-leader)
+    const led = ss.prepare(`
+      SELECT g.id, g.name FROM groups g WHERE g.leader_id = ?
+      UNION
+      SELECT g.id, g.name FROM groups g
+        JOIN group_co_leaders cl ON cl.group_id = g.id WHERE cl.user_id = ?
+    `).all(req.user.id, req.user.id);
+    if (!led.length) return res.status(403).json({ error: "Você não tem visão de gestão" });
+    scope = "lider";
+    scopeLabel = led.map(g => g.name).join(" · ");
+    const ids = led.map(g => g.id);
+    const ph = ids.map(() => "?").join(",");
+    const members = ss.prepare(
+      `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name != ''`
+    ).all(...ids);
+    names = new Set(members.map(m => norm(m.fn)));
+  }
+
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+
+  try {
+    const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
+    if (!latRow || !latRow.m) return res.json({ scope, scopeLabel, role: me.role, people: [] });
+    const latest = latRow.m.slice(0, 7);
+    const pm = prevMonthStr(latest);
+    const monthLabel = PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4);
+
+    let desigs = d.prepare(
+      "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0"
+    ).all(latest + "-%");
+    if (names) desigs = desigs.filter(x => names.has(norm(x.name)));
+
+    const rankCache = {};
+    const rankMap = (grp) => {
+      if (rankCache[grp]) return rankCache[grp];
+      const rows = d.prepare(
+        "SELECT designer_name name, AVG(progress)*100 ap FROM productivity WHERE group_no=? AND snapshot_date LIKE ? AND quota>0 GROUP BY designer_name ORDER BY ap DESC"
+      ).all(grp, latest + "-%");
+      const map = {}; rows.forEach((r, i) => { map[r.name] = i + 1; });
+      return (rankCache[grp] = { map, size: rows.length });
+    };
+
+    const people = desigs.map(x => {
+      const a = d.prepare(
+        "SELECT AVG(progress)*100 pct, SUM(new_case_count+mod_count+refinement_count) cases FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
+      ).get(x.name, latest + "-%");
+      const ap = d.prepare(
+        "SELECT AVG(progress)*100 pct FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
+      ).get(x.name, pm + "-%");
+      const q = d.prepare(
+        "SELECT avg_score score, score_qty qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ? ORDER BY snapshot_date DESC LIMIT 1"
+      ).get(x.name, latest + "-%");
+      const wk = d.prepare(
+        "SELECT COALESCE(qty_low_score,0) low, COALESCE(score_qty,0) qty FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC LIMIT 12"
+      ).all(x.name);
+      const low = wk.reduce((s, r) => s + r.low, 0), lqty = wk.reduce((s, r) => s + r.qty, 0);
+      const dseries = d.prepare(
+        "SELECT ROUND(progress*100) p FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date"
+      ).all(x.name, latest + "-%").map(r => r.p);
+      const qseries = d.prepare(
+        "SELECT avg_score s FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC LIMIT 12"
+      ).all(x.name).reverse().map(r => r.s);
+      const rm = rankMap(x.grp);
+      return {
+        name: x.name, grp: x.grp, lvl: x.lvl,
+        pct: round(a.pct), deltaPct: ap && ap.pct != null ? round(a.pct - ap.pct) : null,
+        rank: rm.map[x.name] || null, groupSize: rm.size,
+        score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0,
+        lowRatePct: lqty ? Number((low / lqty * 100).toFixed(1)) : 0, lowTotal: low,
+        cases: a.cases || 0, prodTrend: trendOf(dseries), qTrend: trendOf(qseries),
+      };
+    });
+
+    res.json({ scope, scopeLabel, role: me.role, monthLabel, people });
+  } catch (e) {
+    console.error("[indicators/overview]", e.message);
+    res.status(500).json({ error: "Falha ao calcular a visão de gestão" });
   }
 });
 

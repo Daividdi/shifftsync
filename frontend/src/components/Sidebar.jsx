@@ -331,9 +331,9 @@ export default function Sidebar({ active, setActive }) {
         {/* Geral — todos veem */}
         <NavGroup label="Geral" T={T} defaultOpen={true}>
           <NavItem id="dashboard" label="Dashboard"    icon={<Layers size={15} />}   active={active} setActive={setActive} T={T} />
+          <NotificationBell T={T} setActive={setActive} />
           <NavItem id="birthdays" label="Aniversários"
             icon={<Cake size={15}/>} active={active} setActive={setActive} T={T} />
-          <NotificationBell T={T} setActive={setActive} />
           <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
           <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} />
         </NavGroup>

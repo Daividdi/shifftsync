@@ -37,7 +37,6 @@ export default function BirthdaysPage() {
   const byDay = {};
   for (const b of inMonth) { (byDay[b.day] = byDay[b.day] || []).push(b); }
   const todayBirthdays = birthdays.filter(b => b.isToday);
-  const upcoming = birthdays.filter(b => !b.isToday && b.daysUntil <= 30);
 
   const searchLower = search.toLowerCase();
   const searchResults = search
@@ -242,20 +241,6 @@ export default function BirthdaysPage() {
                 </div>
               </Card>
             )}
-
-            {/* Próximos 30 dias */}
-            <Card>
-              <div style={{ fontSize: 11, color: T.t8, fontWeight: 700, letterSpacing: "0.09em", marginBottom: 14 }}>
-                PRÓXIMOS 30 DIAS
-                {upcoming.length > 0 && <span style={{ color: "#EC4899", marginLeft: 6 }}>· {upcoming.length}</span>}
-              </div>
-              {upcoming.length === 0
-                ? <div style={{ color: T.t9, fontSize: 12, textAlign: "center", padding: "14px 0" }}>Nenhum aniversário nos próximos 30 dias</div>
-                : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {upcoming.map(b => <BirthdayRow key={b.id} b={b} T={T} todayMMDD={todayMMDD} compact />)}
-                  </div>
-              }
-            </Card>
 
           </div>
         </div>

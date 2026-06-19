@@ -255,57 +255,6 @@ function TeamTodayCard({ T }) {
   );
 }
 
-// Aniversários do mês — visível para todos
-function MonthBirthdaysCard({ T }) {
-  const [birthdays, setBirthdays] = useState([]);
-  useEffect(()=>{
-    api.get("/users/birthdays").then(r=>setBirthdays(r.data||[])).catch(()=>{});
-  },[]);
-
-  const currentMonth = new Date().getMonth() + 1;
-  const thisMonth = birthdays.filter(b => b.month === currentMonth);
-  const todayBirthdays = birthdays.filter(b => b.isToday);
-
-  if (thisMonth.length === 0) return null;
-
-  return (
-    <Card style={{marginBottom:12}}>
-      <div style={{fontSize:12,fontWeight:600,color:T.t1,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{display:"flex",alignItems:"center",gap:6}}>
-          <Cake size={13} color="#EC4899"/>
-          Aniversários do mês
-        </span>
-        <span style={{fontSize:11,color:"#EC4899",fontWeight:500}}>{thisMonth.length} pessoa{thisMonth.length>1?"s":""}</span>
-      </div>
-
-      {todayBirthdays.length > 0 && (
-        <div style={{marginBottom:10,padding:"8px 10px",background:"linear-gradient(135deg,#EC489920,#F4729610)",border:"1px solid #EC489940",borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:18}}>🎂</span>
-          <div style={{flex:1,fontSize:11,fontWeight:700,color:"#EC4899"}}>
-            Hoje: {todayBirthdays.map(b=>b.fullName.split(" ")[0]).join(", ")}!
-          </div>
-        </div>
-      )}
-
-      <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:200,overflowY:"auto"}}>
-        {[...thisMonth].sort((a,b)=>a.day-b.day).map(b=>{
-          const isT = b.isToday;
-          const [mm,dd] = b.mmdd.split("-");
-          return (
-            <div key={b.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",borderRadius:7,background:isT?"#EC489915":T.bgDeep,border:`1px solid ${isT?"#EC489940":T.border}`}}>
-              <div style={{fontSize:11,fontWeight:700,color:isT?"#EC4899":T.t8,width:32,flexShrink:0,textAlign:"center"}}>{dd}/{mm}</div>
-              <Avatar name={b.fullName} size={22} color={isT?"#EC4899":T.accent}/>
-              <span style={{fontSize:11,color:isT?"#EC4899":T.t3,fontWeight:isT?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{b.fullName}</span>
-              {isT&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:"#EC489920",color:"#EC4899",fontWeight:700,flexShrink:0}}>HOJE</span>}
-              {!isT&&b.daysUntil<=7&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:T.amber+"20",color:T.amber,fontWeight:600,flexShrink:0}}>{b.daysUntil}d</span>}
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
 
 // Beach countdown messages by days remaining
 const beachMsgs = [
@@ -604,8 +553,6 @@ export default function Dashboard() {
         {/* Col direita */}
         <div>
           {(isHR||isLeader)&&<TeamSaturdayCard user={user} schedule={schedule} groups={groups} users={users} T={T}/>}
-          {/* Aniversários do mês — visível para todos */}
-          <MonthBirthdaysCard T={T}/>
         </div>
       </div>
     </div>

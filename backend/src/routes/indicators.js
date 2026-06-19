@@ -29,6 +29,18 @@ function prevMonthStr(mo) {
 function norm(s) {
   return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
+const nameTokens = (s) => norm(s).split(" ").filter(Boolean);
+const subset = (a, b) => a.every(t => b.includes(t));
+// Same person across ShiftSync \u2194 BI: same normalized name, OR same first name
+// and one token-set contained in the other (e.g. "Alvaro Calzolari de Araujo"
+// \u2194 "Alvaro Calzolari"). Safe because there are no homonyms in the roster.
+function nameMatch(a, b) {
+  const ta = nameTokens(a), tb = nameTokens(b);
+  if (!ta.length || !tb.length) return false;
+  if (ta.join(" ") === tb.join(" ")) return true;
+  if (ta[0] !== tb[0]) return false;
+  return subset(ta, tb) || subset(tb, ta);
+}
 function trendOf(arr) {
   const v = arr.filter(x => x != null);
   if (v.length < 3) return "flat";
@@ -39,22 +51,26 @@ function trendOf(arr) {
   return Math.abs(df) < (Math.abs(h) * 0.02 + 0.05) ? "flat" : df > 0 ? "up" : "down";
 }
 
-// GET /api/indicators/me — personal indicators for the logged-in user only.
-router.get("/me", requireAuth, (req, res) => {
-  const user = getDb().prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id);
-  if (!user || !user.full_name) return res.status(404).json({ error: "Usuário não encontrado" });
-  const name = user.full_name;
+// Build the full personal-indicators bundle for one designer (used by /me and
+// by /person for the management drill-down). Returns the response object.
+function buildPersonBundle(d, inputName) {
+  let name = inputName;
+  // Identity + the month we report on (latest month the person has productivity data)
+  let idn = d.prepare(
+    "SELECT group_no, job_level, MAX(snapshot_date) AS last FROM productivity WHERE designer_name=?"
+  ).get(name);
+  // Fallback: resolve the BI name when it differs slightly from full_name
+  if (!idn || !idn.last) {
+    const alt = d.prepare("SELECT DISTINCT designer_name n FROM productivity").all()
+      .map(r => r.n).find(n => nameMatch(name, n));
+    if (alt) {
+      name = alt;
+      idn = d.prepare("SELECT group_no, job_level, MAX(snapshot_date) AS last FROM productivity WHERE designer_name=?").get(name);
+    }
+  }
+  if (!idn || !idn.last) return { hasData: false, name };
 
-  let d;
-  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
-
-  try {
-    // Identity + the month we report on (latest month the person has productivity data)
-    const idn = d.prepare(
-      "SELECT group_no, job_level, MAX(snapshot_date) AS last FROM productivity WHERE designer_name=?"
-    ).get(name);
-    if (!idn || !idn.last) return res.json({ hasData: false, name });
-
+  {
     const group = idn.group_no;
     const month = idn.last.slice(0, 7);                       // YYYY-MM
     const prevMonth = (() => {
@@ -127,7 +143,7 @@ router.get("/me", requireAuth, (req, res) => {
       return Math.abs(diff) < (Math.abs(head) * 0.02 + 0.05) ? "flat" : diff > 0 ? "up" : "down";
     };
 
-    res.json({
+    return {
       hasData: true,
       name, group, level: idn.job_level, month,
       attainment: {
@@ -146,11 +162,52 @@ router.get("/me", requireAuth, (req, res) => {
       } : null,
       cases: { new: cur.nc || 0, mod: cur.mod || 0, ref: cur.ref || 0 },
       dailyProd, weeklyQual,
-    });
-  } catch (e) {
-    console.error("[indicators]", e.message);
-    res.status(500).json({ error: "Falha ao calcular indicadores" });
+    };
   }
+}
+
+// Can `userId` (with `role`) view the indicators of `targetName`?
+// Gestor sees anyone; a leader sees the members of the team(s) they lead.
+function canSeePerson(ss, userId, role, targetName) {
+  if (new Set(["gerencia", "hr", "ti"]).has(role)) return true;
+  const led = ss.prepare(`
+    SELECT g.id FROM groups g WHERE g.leader_id = ?
+    UNION
+    SELECT g.id FROM groups g JOIN group_co_leaders cl ON cl.group_id = g.id WHERE cl.user_id = ?
+  `).all(userId, userId);
+  if (!led.length) return false;
+  const ids = led.map(g => g.id);
+  const ph = ids.map(() => "?").join(",");
+  const members = ss.prepare(
+    `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id = gm.user_id
+     WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name != ''`
+  ).all(...ids).map(r => r.fn);
+  return members.some(m => nameMatch(m, targetName));
+}
+
+// GET /api/indicators/me — personal indicators for the logged-in user only.
+router.get("/me", requireAuth, (req, res) => {
+  const user = getDb().prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id);
+  if (!user || !user.full_name) return res.status(404).json({ error: "Usuário não encontrado" });
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+  try { return res.json(buildPersonBundle(d, user.full_name)); }
+  catch (e) { console.error("[indicators]", e.message); return res.status(500).json({ error: "Falha ao calcular indicadores" }); }
+});
+
+// GET /api/indicators/person?name= — detailed individual panel for a manager/leader.
+router.get("/person", requireAuth, (req, res) => {
+  const targetName = (req.query.name || "").trim();
+  if (!targetName) return res.status(400).json({ error: "Nome não informado" });
+  const ss = getDb();
+  const me = ss.prepare("SELECT role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
+  if (!canSeePerson(ss, req.user.id, me.role, targetName))
+    return res.status(403).json({ error: "Sem permissão para ver este colaborador" });
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+  try { return res.json(buildPersonBundle(d, targetName)); }
+  catch (e) { console.error("[indicators/person]", e.message); return res.status(500).json({ error: "Falha ao calcular indicadores" }); }
 });
 
 // GET /api/indicators/overview — management view.
@@ -162,7 +219,7 @@ router.get("/overview", requireAuth, (req, res) => {
   if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
 
   const GESTOR = new Set(["gerencia", "hr", "ti"]);
-  let scope, scopeLabel, names = null;
+  let scope, scopeLabel, memberNames = null;
 
   if (GESTOR.has(me.role)) {
     scope = "gestor";
@@ -184,7 +241,7 @@ router.get("/overview", requireAuth, (req, res) => {
       `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id = gm.user_id
        WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name != ''`
     ).all(...ids);
-    names = new Set(members.map(m => norm(m.fn)));
+    memberNames = members.map(m => m.fn);
   }
 
   let d;
@@ -200,7 +257,7 @@ router.get("/overview", requireAuth, (req, res) => {
     let desigs = d.prepare(
       "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0"
     ).all(latest + "-%");
-    if (names) desigs = desigs.filter(x => names.has(norm(x.name)));
+    if (memberNames) desigs = desigs.filter(x => memberNames.some(mn => nameMatch(mn, x.name)));
 
     const rankCache = {};
     const rankMap = (grp) => {

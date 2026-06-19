@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Users2, ChevronDown, ChevronUp, AlertTriangle, ShieldCheck } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
+import PersonalIndicatorsPage from "./PersonalIndicatorsPage";
 
 const fmt = (v, d = 0) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const gshort = (g) => (g || "").replace("BR-ATD-", "").replace("BR-", "");
@@ -47,6 +48,7 @@ export default function ManagementOverviewPage() {
   const [sort, setSort] = useState({ k: "pct", dir: -1 });
   const [exp, setExp] = useState(null);
   const [onlyWarn, setOnlyWarn] = useState(false);
+  const [detailName, setDetailName] = useState(null);
 
   useEffect(() => {
     api.get("/indicators/overview")
@@ -94,6 +96,10 @@ export default function ManagementOverviewPage() {
       <Users2 size={18} />
     </span>
   );
+
+  if (detailName) {
+    return <PersonalIndicatorsPage name={detailName} onBack={() => setDetailName(null)} />;
+  }
 
   if (err) {
     return (
@@ -214,10 +220,14 @@ export default function ManagementOverviewPage() {
                               </div>
                             ))}
                             {warn && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginLeft: "auto", color: T.red, fontSize: 12.5, fontWeight: 600 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7, color: T.red, fontSize: 12.5, fontWeight: 600 }}>
                                 <AlertTriangle size={15} /> {p.pct < 100 ? "abaixo da meta" : ""}{p.pct < 100 && p.lowRatePct >= 10 ? " · " : ""}{p.lowRatePct >= 10 ? "notas baixas elevadas" : ""}
                               </div>
                             )}
+                            <button onClick={(e) => { e.stopPropagation(); setDetailName(p.name); }}
+                              style={{ marginLeft: "auto", background: T.accentGradient || T.accent, color: "#06222e", fontWeight: 800, fontSize: 13, padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer", whiteSpace: "nowrap" }}>
+                              Abrir painel completo →
+                            </button>
                           </div>
                         </td>
                       </tr>

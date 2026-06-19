@@ -68,16 +68,17 @@ function RangeBar({ label, valueLabel, valueColor, fillPct, markerPct, scale, no
   );
 }
 
-export default function PersonalIndicatorsPage() {
+export default function PersonalIndicatorsPage({ name, onBack }) {
   const { theme: T } = useTheme();
   const [state, setState] = useState({ loading: true });
 
   useEffect(() => {
     setState({ loading: true });
-    api.get("/indicators/me")
+    const path = name ? `/indicators/person?name=${encodeURIComponent(name)}` : "/indicators/me";
+    api.get(path)
       .then(r => setState({ loading: false, data: r.data }))
       .catch(e => setState({ loading: false, error: e.response?.data?.error || "Falha ao carregar" }));
-  }, []);
+  }, [name]);
 
   const d = state.data;
   const card = { background: `linear-gradient(180deg, ${T.bgCard}, ${T.bgDeep})`, border: `1px solid ${T.border}`, borderRadius: 18, padding: "18px 18px 16px" };
@@ -89,11 +90,16 @@ export default function PersonalIndicatorsPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
         <div>
+          {onBack && (
+            <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: T.bgCard, border: `1px solid ${T.border}`, color: T.t2, borderRadius: 9, padding: "6px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 12 }}>
+              ← Voltar à Visão de Gestão
+            </button>
+          )}
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
             <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={18} /></span>
-            Indicadores Pessoais
+            {name ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
           </h1>
-          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>Seus avanços, qualidade e volume — acompanhe e supere suas metas</p>
+          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{name ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
         </div>
         {d?.hasData && <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 13, padding: "7px 14px 7px 7px" }}>
           <div style={{ width: 40, height: 40, borderRadius: 11, background: T.accentGradient, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#06222e" }}>{initials(d.name)}</div>
@@ -108,8 +114,8 @@ export default function PersonalIndicatorsPage() {
 
       {!state.loading && d && !d.hasData && <div style={{ textAlign: "center", padding: "60px 20px", color: T.t4 }}>
         <div style={{ fontSize: 34, marginBottom: 10 }}>📊</div>
-        Ainda não há dados de produtividade/qualidade vinculados ao seu nome.<br />
-        <span style={{ fontSize: 12, color: T.t6 }}>Assim que a planilha do BI for carregada com seus resultados, eles aparecem aqui.</span>
+        Ainda não há dados de produtividade/qualidade vinculados {name ? "a este colaborador" : "ao seu nome"}.<br />
+        <span style={{ fontSize: 12, color: T.t6 }}>Assim que a planilha do BI for carregada com os resultados, eles aparecem aqui.</span>
       </div>}
 
       {!state.loading && d?.hasData && (() => {

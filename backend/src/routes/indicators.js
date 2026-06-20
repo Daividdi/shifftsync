@@ -187,7 +187,23 @@ function buildPersonBundle(d, inputName) {
     monthsSeries, qualityMonthly, weeklyLowAll,
   };
 
-  return { hasData: true, name, group, level: idn.job_level, latest, monthsMeta, byMonth, monthly };
+  // Últimos 3 meses (agregado, regra do BI: soma concluídos / soma cota)
+  const l3m = months.slice(-3);
+  const l3ph = l3m.map(() => "?").join(",");
+  const l3a = d.prepare(`SELECT COUNT(*) days, SUM(completed) comp, SUM(quota) quo, SUM(new_case_count) nc, SUM(mod_count) mod, SUM(refinement_count) ref FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${l3ph}) AND quota>0`).get(name, ...l3m);
+  const l3comp = d.prepare(`WITH r AS (SELECT designer_name dn, SUM(completed)*100.0/NULLIF(SUM(quota),0) ap FROM productivity WHERE group_no=? AND substr(snapshot_date,1,7) IN (${l3ph}) AND quota>0 GROUP BY designer_name) SELECT AVG(ap) avg, MAX(ap) best, COUNT(*) total, (SELECT COUNT(*) FROM r WHERE ap > (SELECT ap FROM r WHERE dn=?))+1 rank FROM r`).get(group, ...l3m, name);
+  const l3q = d.prepare(`SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND substr(snapshot_date,1,7) IN (${l3ph})`).get(name, ...l3m);
+  const l3qg = d.prepare(`SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month' AND substr(snapshot_date,1,7) IN (${l3ph})`).get(group, ...l3m);
+  const l3weeks = weeklyLowAll.filter(w => l3m.includes(w.date.slice(0, 7)));
+  const last3 = {
+    periodLabel: "Últimos 3 meses · " + PTM[+l3m[0].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
+    attainment: { pct: l3a && l3a.quo > 0 ? round(l3a.comp / l3a.quo * 100) : null, deltaPct: null, completed: round(l3a.comp, 1), days: l3a.days, groupAvg: round(l3comp && l3comp.avg), groupBest: round(l3comp && l3comp.best), rank: l3comp && l3comp.rank, groupSize: l3comp && l3comp.total, rankPrev: null, trend: trend(monthsSeries.slice(-3)) },
+    quality: l3q && l3q.score != null ? { score: round(l3q.score, 2), qty: l3q.qty, delta: null, groupAvg: round(l3qg ? l3qg.avg : null, 2), groupBest: round(l3qg ? l3qg.best : null, 2), trend: trend(l3weeks) } : null,
+    lowScore: lowAgg(l3weeks), cases: { new: l3a.nc || 0, mod: l3a.mod || 0, ref: l3a.ref || 0 },
+    monthsSeries: monthsSeries.slice(-3), qualityMonthly: qualityMonthly.slice(-3), weeklyLowAll: l3weeks,
+  };
+
+  return { hasData: true, name, group, level: idn.job_level, latest, monthsMeta, byMonth, monthly, last3 };
 }
 
 // Can `userId` (with `role`) view the indicators of `targetName`?

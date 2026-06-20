@@ -303,11 +303,13 @@ export default function PersonalIndicatorsPage() {
 
       {mode === "individual" && !state.loading && d?.hasData && (() => {
         const isAcc = gran === "acc";
+        const isL3 = gran === "last3";
         const month = (selMonth && d.byMonth[selMonth]) ? selMonth : d.latest;
-        const S = isAcc ? d.monthly : d.byMonth[month];
+        const S = isL3 ? (d.last3 || d.monthly) : isAcc ? d.monthly : d.byMonth[month];
         const a = S.attainment, q = S.quality, L = S.lowScore;
         const qualityOnly = !a;   // QC reviewers (sem meta de produtividade)
-        const monthName = isAcc ? "acumulado" : (S.periodLabel || "").split("/")[0];
+        const aggView = isAcc || isL3;
+        const monthName = isAcc ? "acumulado" : isL3 ? "últimos 3 meses" : (S.periodLabel || "").split("/")[0];
         const aboveAvg = a && a.groupAvg != null && a.pct >= a.groupAvg;
         const qBelow = q && q.groupAvg != null && q.score < q.groupAvg;
         const pill = (on) => ({ background: on ? T.accent : "transparent", color: on ? "#06222e" : T.t6, border: `1px solid ${on ? "transparent" : T.border}`, borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
@@ -316,11 +318,11 @@ export default function PersonalIndicatorsPage() {
         let prodData, prodTitle;
         if (gran === "day") { prodData = S.dailyProd || []; prodTitle = `Atingimento diário — ${monthName}`; }
         else if (gran === "week") { prodData = (S.weeklyProd || []).map(w => [String(w[0]).split("–")[0], w[1]]); prodTitle = `Atingimento semanal — ${monthName}`; }
-        else { prodData = d.monthly.monthsSeries || []; prodTitle = isAcc ? "Atingimento por mês — acumulado" : "Atingimento por mês"; }
+        else { prodData = (isL3 ? S.monthsSeries : d.monthly.monthsSeries) || []; prodTitle = isAcc ? "Atingimento por mês — acumulado" : isL3 ? "Atingimento por mês — últimos 3" : "Atingimento por mês"; }
 
         // Quality chart series
-        const useMonthlyQ = gran === "month" || isAcc;
-        const qSource = useMonthlyQ ? (d.monthly.qualityMonthly || []) : (S.weeklyLow || []);
+        const useMonthlyQ = gran === "month" || aggView;
+        const qSource = useMonthlyQ ? ((isL3 ? S.qualityMonthly : d.monthly.qualityMonthly) || []) : (S.weeklyLow || []);
         const qData = qSource.map(w => [w.date || w.range, w.score]);
         const qTitle = useMonthlyQ ? "Qualidade mensal — por mês" : "Qualidade semanal — últimas semanas";
 
@@ -329,11 +331,11 @@ export default function PersonalIndicatorsPage() {
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Período</span>
-              {(qualityOnly ? [["week", "Semana"], ["month", "Mês"], ["acc", "Acumulado"]] : [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["acc", "Acumulado"]]).map(([k, lab]) => (
+              {(qualityOnly ? [["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]] : [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]]).map(([k, lab]) => (
                 <button key={k} onClick={() => setGran(k)} style={pill(gran === k || (qualityOnly && gran === "day" && k === "week"))}>{lab}</button>
               ))}
             </div>
-            {!isAcc && d.monthsMeta?.length > 1 && (
+            {!aggView && d.monthsMeta?.length > 1 && (
               <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Mês</span>
                 {d.monthsMeta.map(mm => (
@@ -426,7 +428,7 @@ export default function PersonalIndicatorsPage() {
                 </div>;
               })}
             </div>}
-            <div style={{ fontSize: 11, color: T.t9, marginTop: 12 }}>Cada coluna é {gran === "month" || isAcc ? "um mês" : "uma semana"}; vermelho = notas abaixo de 6. Meta: manter abaixo de 15%.</div>
+            <div style={{ fontSize: 11, color: T.t9, marginTop: 12 }}>Cada coluna é {gran === "month" || aggView ? "um mês" : "uma semana"}; vermelho = notas abaixo de 6. Meta: manter abaixo de 15%.</div>
           </div>}
 
           {/* Charts */}

@@ -59,7 +59,7 @@ export default function BirthdaysPage() {
   const selectedPeople = selectedDay ? (byDay[selectedDay] || []) : [];
 
   return (
-    <div style={{ padding: "18px 24px", overflowY: "auto", maxWidth: 940, margin: "0 auto", width: "100%" }}>
+    <div style={{ padding: "16px 24px", height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", boxSizing: "border-box" }}>
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -126,12 +126,12 @@ export default function BirthdaysPage() {
 
       {/* ── Layout principal ── */}
       {!search && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minHeight: 0 }}>
 
-          {/* ── Calendário (largura total) ── */}
-          <Card style={{ padding: 0, overflow: "hidden" }}>
+          {/* ── Calendário (largura total, preenche a altura) ── */}
+          <Card style={{ padding: 0, overflow: "hidden", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
             {/* Nav do mês */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 18px", borderBottom: `1px solid ${T.borderSubtle}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 18px", borderBottom: `1px solid ${T.borderSubtle}`, flexShrink: 0 }}>
               <button onClick={prevMonth} style={{ background: "none", border: "none", color: T.t6, cursor: "pointer", padding: 6, borderRadius: 8, display: "flex", transition: "background 0.1s" }}
                 onMouseEnter={e => e.currentTarget.style.background = T.bgDeep}
                 onMouseLeave={e => e.currentTarget.style.background = "none"}>
@@ -153,14 +153,14 @@ export default function BirthdaysPage() {
             </div>
 
             {/* Cabeçalho dias */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: `1px solid ${T.borderSubtle}`, background: T.bgDeep }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: `1px solid ${T.borderSubtle}`, background: T.bgDeep, flexShrink: 0 }}>
               {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d => (
                 <div key={d} style={{ padding: "6px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: T.t9, letterSpacing: "0.06em" }}>{d}</div>
               ))}
             </div>
 
             {/* Grade */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", flex: 1, minHeight: 0, gridAutoRows: "1fr" }}>
               {cells.map((day, idx) => {
                 const hasBday = day && byDay[day];
                 const isSelected = day === selectedDay;
@@ -169,7 +169,7 @@ export default function BirthdaysPage() {
                   <div key={idx}
                     onClick={() => day && hasBday && setSelectedDay(isSelected ? null : day)}
                     style={{
-                      minHeight: 82, padding: "6px 8px",
+                      minHeight: 56, padding: "6px 8px",
                       borderBottom: `1px solid ${T.borderRow}`,
                       borderRight: idx % 7 !== 6 ? `1px solid ${T.borderRow}` : "none",
                       background: isSelected ? "#EC489918" : isTod ? T.accent + "0D" : "transparent",

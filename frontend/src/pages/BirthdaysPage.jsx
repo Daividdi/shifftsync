@@ -59,7 +59,7 @@ export default function BirthdaysPage() {
   const selectedPeople = selectedDay ? (byDay[selectedDay] || []) : [];
 
   return (
-    <div style={{ padding: "18px 24px", overflowY: "auto" }}>
+    <div style={{ padding: "18px 24px", overflowY: "auto", maxWidth: 940, margin: "0 auto", width: "100%" }}>
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -169,7 +169,7 @@ export default function BirthdaysPage() {
                   <div key={idx}
                     onClick={() => day && hasBday && setSelectedDay(isSelected ? null : day)}
                     style={{
-                      minHeight: 76, padding: "5px 7px",
+                      minHeight: 82, padding: "6px 8px",
                       borderBottom: `1px solid ${T.borderRow}`,
                       borderRight: idx % 7 !== 6 ? `1px solid ${T.borderRow}` : "none",
                       background: isSelected ? "#EC489918" : isTod ? T.accent + "0D" : "transparent",

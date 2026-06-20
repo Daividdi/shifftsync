@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, ChevronLeft, ChevronRight, Trash2, Calendar, List, Clock, AlertTriangle, X, DoorOpen } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Trash2, Calendar, List, Clock, AlertTriangle, X, DoorOpen, Pencil } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Input, Select } from "../components/UI";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
@@ -69,7 +69,7 @@ function userColor(id) {
   return colorCache[id];
 }
 
-function EventBlock({ booking, onDelete, canDelete, style={} }) {
+function EventBlock({ booking, onDelete, onEdit, canDelete, style={} }) {
   const { theme: T } = useTheme();
   const color = userColor(booking.createdBy);
   const [hover, setHover] = useState(false);
@@ -99,17 +99,27 @@ function EventBlock({ booking, onDelete, canDelete, style={} }) {
         </span>
       )}
       {canDelete&&hover&&(
-        <button onClick={e=>{e.stopPropagation();onDelete(booking.id);}} style={{
-          position:"absolute",top:3,right:3,background:"none",border:"none",
-          cursor:"pointer",color:T.red,padding:2,lineHeight:1,
-        }}><X size={10}/></button>
+        <div style={{position:"absolute",top:3,right:3,display:"flex",gap:2}}>
+          {onEdit&&<button onClick={e=>{e.stopPropagation();onEdit(booking);}} title="Editar" style={{
+            background:"none",border:"none",cursor:"pointer",color:T.t6,padding:2,lineHeight:1,
+          }}><Pencil size={10}/></button>}
+          <button onClick={e=>{e.stopPropagation();onDelete(booking.id);}} title="Excluir" style={{
+            background:"none",border:"none",cursor:"pointer",color:T.red,padding:2,lineHeight:1,
+          }}><X size={11}/></button>
+        </div>
       )}
     </div>
   );
 }
 
-function BookingForm({ onSave, onCancel, T, user }) {
-  const [form, setForm]         = useState({ title:"", description:"", date:new Date().toISOString().slice(0,10), startTime:"09:00", endTime:"10:00", recurrence:"none", recurrenceEnd:"", participants:[] });
+function BookingForm({ onSave, onCancel, T, user, initial }) {
+  const [form, setForm]         = useState(() => initial ? {
+    title: initial.title||"", description: initial.description||"",
+    date: initial.date || new Date().toISOString().slice(0,10),
+    startTime: initial.startTime||"09:00", endTime: initial.endTime||"10:00",
+    recurrence: initial.recurrence||"none", recurrenceEnd: initial.recurrenceEnd||"",
+    participants: (initial.participants||[]).map(p=>p.id),
+  } : { title:"", description:"", date:new Date().toISOString().slice(0,10), startTime:"09:00", endTime:"10:00", recurrence:"none", recurrenceEnd:"", participants:[] });
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
@@ -145,7 +155,7 @@ function BookingForm({ onSave, onCancel, T, user }) {
 
   return (
     <div style={{background:T.bgCard,border:`1px solid ${T.border}`,borderRadius:14,padding:24,marginBottom:16}}>
-      <div style={{fontSize:15,fontWeight:700,color:T.t1,marginBottom:20}}>Nova Reserva — Sala de Reunião</div>
+      <div style={{fontSize:15,fontWeight:700,color:T.t1,marginBottom:20}}>{initial?"Editar Reserva":"Nova Reserva"} — Sala de Reunião</div>
 
       {conflicts.length>0&&(
         <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",background:T.red+"12",border:`1px solid ${T.red}33`,borderRadius:10,marginBottom:16}}>
@@ -238,7 +248,7 @@ function BookingForm({ onSave, onCancel, T, user }) {
         <Btn variant="ghost" onClick={onCancel}>Cancelar</Btn>
         <Btn disabled={loading||conflicts.length>0} onClick={handleSave}
           style={{background:conflicts.length>0?T.t10:T.accent,color:"#fff",border:"none"}}>
-          {loading?"Salvando...":"Confirmar Reserva"}
+          {loading?"Salvando...":initial?"Salvar alterações":"Confirmar Reserva"}
         </Btn>
       </div>
     </div>
@@ -254,6 +264,7 @@ export default function MeetingRoom() {
   const [currentDate, setCurrentDate] = useState(today);
   const [bookings, setBookings] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing]   = useState(null);
   const [flash, setFlash]       = useState("");
 
   const tt = { background:T.tooltipBg, border:`1px solid ${T.border}`, borderRadius:8, fontSize:12, color:T.t1, padding:"8px 12px" };
@@ -283,12 +294,19 @@ export default function MeetingRoom() {
 
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
   const handleSave = async (form) => {
-    await api.post("/meeting", { ...form });
-    setShowForm(false);
-    setFlash("Reserva criada!");
+    if (editing) {
+      await api.put(`/meeting/${editing.id}`, { ...form });
+      setFlash("Reserva atualizada!");
+    } else {
+      await api.post("/meeting", { ...form });
+      setFlash("Reserva criada!");
+    }
+    setShowForm(false); setEditing(null);
     setTimeout(()=>setFlash(""),3000);
     fetchBookings();
   };
+
+  const handleEdit = (booking) => { setEditing(booking); setShowForm(true); };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Excluir esta reserva?")) return;
@@ -363,6 +381,7 @@ export default function MeetingRoom() {
                       <EventBlock booking={b} T={T}
                         canDelete={b.createdBy===user.id||isAdmin(user.role)}
                         onDelete={handleDelete}
+                        onEdit={handleEdit}
                         style={{height:"100%",boxSizing:"border-box",overflow:"hidden"}}
                       />
                     </div>
@@ -497,7 +516,7 @@ export default function MeetingRoom() {
           {flash&&<div style={{padding:"6px 12px",background:flash.includes("removida")?T.red+"18":T.green+"18",border:`1px solid ${flash.includes("removida")?T.red:T.green}44`,borderRadius:8,fontSize:12,color:flash.includes("removida")?T.red:T.green,fontWeight:600}}>{flash}</div>}
 
           {isLeader(user.role)&&(
-            <Btn onClick={()=>setShowForm(v=>!v)} icon={<Plus size={14}/>} style={{background:T.accent,color:"#fff",border:"none"}}>
+            <Btn onClick={()=>{ setEditing(null); setShowForm(v=>!v); }} icon={<Plus size={14}/>} style={{background:T.accent,color:"#fff",border:"none"}}>
               Reservar
             </Btn>
           )}
@@ -506,7 +525,7 @@ export default function MeetingRoom() {
 
       {/* Formulário */}
       {showForm&&isLeader(user.role)&&(
-        <BookingForm onSave={handleSave} onCancel={()=>setShowForm(false)} T={T} user={user}/>
+        <BookingForm onSave={handleSave} onCancel={()=>{ setShowForm(false); setEditing(null); }} T={T} user={user} initial={editing}/>
       )}
 
       {/* Navegação */}

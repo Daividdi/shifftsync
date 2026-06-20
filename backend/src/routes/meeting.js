@@ -157,6 +157,50 @@ router.post("/", requireAuth, (req, res) => {
   return res.status(201).json(fmt(db.prepare("SELECT * FROM meeting_bookings WHERE id=?").get(id), db));
 });
 
+// PUT /api/meeting/:id — editar reserva
+router.put("/:id", requireAuth, (req, res) => {
+  const db = getDb();
+  const existing = db.prepare("SELECT * FROM meeting_bookings WHERE id=?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Reserva não encontrada" });
+  if (existing.created_by !== req.user.id && !isAdmin(req.user.role))
+    return res.status(403).json({ error: "Sem permissão" });
+
+  const { title, description, date, startTime, endTime, recurrence = "none", recurrenceEnd, participants } = req.body;
+  if (!title || !date || !startTime || !endTime)
+    return res.status(400).json({ error: "title, date, startTime e endTime obrigatórios" });
+  if (startTime >= endTime)
+    return res.status(400).json({ error: "Horário de fim deve ser após o início" });
+
+  // Conflitos (exceto a própria reserva)
+  const rows = db.prepare("SELECT * FROM meeting_bookings WHERE id != ?").all(req.params.id);
+  for (const b of rows) {
+    const dates = b.recurrence === "none" ? [b.date] : expandRecurrence(b, date, recurrenceEnd || date);
+    if (!dates.includes(date)) continue;
+    if (startTime < b.end_time && endTime > b.start_time) {
+      return res.status(409).json({ error: `Conflito com "${b.title}" (${b.start_time}–${b.end_time})`, conflict: fmt(b, db) });
+    }
+  }
+
+  db.prepare(`
+    UPDATE meeting_bookings SET title=?, description=?, date=?, start_time=?, end_time=?, recurrence=?, recurrence_end=?
+    WHERE id=?
+  `).run(title, description||null, date, startTime, endTime, recurrence, recurrenceEnd||null, req.params.id);
+
+  // Participantes — substitui e avisa da atualização
+  ensurePart(db);
+  const partIds = Array.isArray(participants) ? [...new Set(participants.filter(Boolean))] : [];
+  db.prepare("DELETE FROM meeting_participants WHERE booking_id=?").run(req.params.id);
+  if (partIds.length) {
+    const ip = db.prepare("INSERT OR IGNORE INTO meeting_participants (booking_id, user_id) VALUES (?,?)");
+    db.transaction(() => { for (const uid of partIds) ip.run(req.params.id, uid); })();
+    const editor = db.prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id)?.full_name || "Alguém";
+    const recur = recurrence !== "none" ? ` · recorrente (${recurrence === "weekly" ? "semanal" : "mensal"})` : "";
+    notifyParticipants(db, partIds, "meeting_invite", `📅 Reunião atualizada: ${title}`, `${date} · ${startTime}–${endTime}${recur}${description ? " · " + description : ""} — por ${editor}`, req.params.id);
+  }
+
+  return res.json(fmt(db.prepare("SELECT * FROM meeting_bookings WHERE id=?").get(req.params.id), db));
+});
+
 // DELETE /api/meeting/:id
 router.delete("/:id", requireAuth, (req, res) => {
   const db = getDb();

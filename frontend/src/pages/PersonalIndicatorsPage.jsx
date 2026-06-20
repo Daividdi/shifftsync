@@ -130,6 +130,18 @@ export default function PersonalIndicatorsPage() {
     const sortKey = (k) => setTeamSort(s => s.k === k ? { k, dir: -s.dir } : { k, dir: (k === "name" || k === "grp") ? 1 : -1 });
     const tP = last(trend?.monthly?.prod)?.[1], cP = last(trend?.monthly?.companyProd)?.[1];
     const tQ = last(trend?.monthly?.qual)?.[1], cQ = last(trend?.monthly?.companyQual)?.[1];
+    const withDelta = rows.filter(p => p.deltaPct != null);
+    const gains = [...withDelta].sort((a, b) => b.deltaPct - a.deltaPct).slice(0, 3);
+    const drops = [...withDelta].sort((a, b) => a.deltaPct - b.deltaPct).slice(0, 3);
+    const buckets = [["<60%", 0, 60], ["60–80%", 60, 80], ["80–100%", 80, 100], ["100–120%", 100, 120], ["≥120%", 120, 1e9]].map(([lab, lo, hi]) => ({ lab, n: rows.filter(p => p.pct >= lo && p.pct < hi).length }));
+    const maxBucket = Math.max(...buckets.map(b => b.n), 1);
+    const exportCsv = () => {
+      const head = ["Colaborador", "Equipe", "Atingimento%", "Delta p.p.", "Posicao", "GrupoTam", "Qualidade", "Avaliacoes", "NotasBaixas%", "NotasBaixas", "Casos"];
+      const lines = sorted.map(p => [p.name, p.grp, p.pct, p.deltaPct == null ? "" : p.deltaPct, p.rank || "", p.groupSize || "", p.score == null ? "" : String(p.score).replace(".", ","), p.qty || "", String(p.lowRatePct).replace(".", ","), p.lowTotal, p.cases].join(";"));
+      const blob = new Blob(["﻿" + [head.join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob); const link = document.createElement("a");
+      link.href = url; link.download = `ranking_${teamGroup === "ALL" ? "todos" : grpShort(teamGroup)}_${trend?.monthLabel || ""}.csv`; link.click(); URL.revokeObjectURL(url);
+    };
     return <>
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", ...card, padding: "12px 16px", marginBottom: 14 }}>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Time</span>
@@ -154,6 +166,35 @@ export default function PersonalIndicatorsPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+        <div style={card}>
+          <div style={h3}><span style={dot(T.green)} />Destaques vs mês anterior</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, color: T.green, fontWeight: 700, marginBottom: 7 }}>▲ Maiores avanços</div>
+              {gains.length ? gains.map((p, i) => <div key={i} onClick={() => openPerson(p.name)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "5px 0", cursor: "pointer", color: T.t2 }}><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span><b style={{ color: T.green, whiteSpace: "nowrap" }}>+{p.deltaPct} p.p.</b></div>) : <div style={{ fontSize: 12, color: T.t6 }}>—</div>}
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: T.red, fontWeight: 700, marginBottom: 7 }}>▼ Maiores quedas</div>
+              {drops.length ? drops.map((p, i) => <div key={i} onClick={() => openPerson(p.name)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "5px 0", cursor: "pointer", color: T.t2 }}><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span><b style={{ color: p.deltaPct < 0 ? T.red : T.t6, whiteSpace: "nowrap" }}>{p.deltaPct > 0 ? "+" : ""}{p.deltaPct} p.p.</b></div>) : <div style={{ fontSize: 12, color: T.t6 }}>—</div>}
+            </div>
+          </div>
+        </div>
+        <div style={card}>
+          <div style={h3}><span style={dot(T.violet)} />Distribuição do atingimento</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", height: 110, marginTop: 6 }}>
+            {buckets.map((b, i) => (
+              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: T.t1 }}>{b.n}</div>
+                <div style={{ width: "100%", maxWidth: 42, height: Math.round(b.n / maxBucket * 72) + 4, borderRadius: "5px 5px 0 0", background: i < 2 ? T.red : i === 2 ? T.amber : T.green }} />
+                <div style={{ fontSize: 10, color: T.t6, whiteSpace: "nowrap" }}>{b.lab}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: T.t9, marginTop: 8 }}>Quantos colaboradores em cada faixa de atingimento.</div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}><div style={h3}><span style={dot(T.accent)} />Evolução — atingimento ({teamGran === "month" ? "mês" : "semana"})</div>{prodSeries.length ? <BarChart data={prodSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
         <div style={card}><div style={h3}><span style={dot(T.amber)} />Evolução — qualidade ({teamGran === "month" ? "mês" : "semana"})</div>{qualSeries.length ? <LineChart data={qualSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
       </div>
@@ -167,7 +208,10 @@ export default function PersonalIndicatorsPage() {
       </div> : null}
 
       <div style={{ ...card, padding: 0, overflow: "hidden" }}>
-        <div style={{ ...h3, margin: 0, padding: "16px 18px" }}><span style={dot(T.green)} />Ranking da equipe — clique para abrir o painel individual</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
+          <div style={{ ...h3, margin: 0 }}><span style={dot(T.green)} />Ranking da equipe — clique para abrir o painel individual</div>
+          <button onClick={exportCsv} style={{ background: T.bgDeep, border: `1px solid ${T.border}`, color: T.t2, borderRadius: 9, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>⬇ Exportar CSV</button>
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr>

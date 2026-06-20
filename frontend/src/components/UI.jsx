@@ -9,8 +9,21 @@ export const Badge = ({ color = "#00C2FF", children, small }) => (
     padding: small ? "1px 7px" : "3px 10px",
     borderRadius: 20, fontSize: small ? 10 : 11,
     fontWeight: 600, letterSpacing: "0.04em", whiteSpace: "nowrap",
+    fontVariantNumeric: "tabular-nums",
   }}>{children}</span>
 );
+
+// Título de seção padrão (bolinha colorida + rótulo em maiúsculas) — estilo dos indicadores
+export const SectionTitle = ({ children, color, icon }) => {
+  const { theme: T } = useTheme();
+  const c = color || T.accent;
+  return (
+    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: T.t7, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      {icon ? icon : <span style={{ width: 7, height: 7, borderRadius: "50%", background: c, display: "inline-block" }} />}
+      {children}
+    </div>
+  );
+};
 
 export const Avatar = ({ name, size = 32, color = "#00C2FF" }) => {
   const initials = name
@@ -33,7 +46,7 @@ export const Card = ({ children, style = {}, className = "" }) => {
       background: `linear-gradient(180deg, ${T.bgCard}, ${T.bgDeep})`,
       border: `1px solid ${T.border}`,
       borderRadius: 16, padding: 20,
-      boxShadow: "0 1px 2px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.10)",
+      boxShadow: "0 1px 2px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
       transition: "background 0.25s, border-color 0.25s",
       ...style,
     }}>{children}</div>
@@ -52,11 +65,11 @@ export const Btn = ({ children, onClick, variant = "primary", small, icon, disab
   return (
     <button type={type} onClick={onClick} disabled={disabled} style={{
       ...styles[variant],
-      borderRadius: 8, padding: small ? "5px 12px" : "8px 16px",
+      borderRadius: 9, padding: small ? "5px 12px" : "8px 16px",
       fontSize: small ? 12 : 13, fontWeight: 600,
       cursor: disabled ? "not-allowed" : "pointer",
       display: "flex", alignItems: "center", gap: 6,
-      opacity: disabled ? 0.5 : 1, transition: "background-color 0.15s ease-out, border-color 0.15s ease-out, opacity 0.15s ease-out",
+      opacity: disabled ? 0.5 : 1, transition: "transform 0.12s ease, filter 0.15s ease, background-color 0.15s ease-out, border-color 0.15s ease-out, opacity 0.15s ease-out",
       fontFamily: "'Sora',sans-serif", whiteSpace: "nowrap", ...style,
     }}>{icon && icon}{children}</button>
   );
@@ -76,14 +89,14 @@ export const Input = ({ value, onChange, placeholder, icon, type = "text", style
         placeholder={placeholder} autoComplete={autoComplete}
         onKeyDown={onKeyDown}
         style={{
-          background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 8,
+          background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 9,
           padding: icon ? "8px 12px 8px 34px" : "8px 12px",
           color: T.t1, fontSize: 13, width: "100%",
           fontFamily: "'Sora',sans-serif", outline: "none",
-          transition: "border-color 0.25s, background 0.25s", ...style,
+          transition: "border-color 0.2s, box-shadow 0.2s, background 0.25s", ...style,
         }}
-        onFocus={(e) => (e.target.style.borderColor = T.accent + "88")}
-        onBlur={(e) => (e.target.style.borderColor = T.border)}
+        onFocus={(e) => { e.target.style.borderColor = T.accent + "aa"; e.target.style.boxShadow = `0 0 0 3px ${T.accent}22`; }}
+        onBlur={(e) => { e.target.style.borderColor = T.border; e.target.style.boxShadow = "none"; }}
       />
     </div>
   );
@@ -95,7 +108,7 @@ export const Select = ({ value, onChange, options, style = {} }) => {
     <select value={value} onChange={onChange} style={{
       background: T.bgCard,
       border: `1px solid ${T.border}`,
-      borderRadius: 8,
+      borderRadius: 9,
       padding: "8px 12px",
       color: T.t1,
       fontSize: 13,

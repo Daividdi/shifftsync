@@ -81,6 +81,7 @@ export default function PersonalIndicatorsPage() {
   const [teamGroup, setTeamGroup] = useState("ALL");
   const [teamGran, setTeamGran] = useState("month"); // month | week
   const [teamSort, setTeamSort] = useState({ k: "pct", dir: -1 });
+  const [teamMonths, setTeamMonths] = useState(1);   // 1 | 3 | 6 | 12 (período de avaliação)
 
   useEffect(() => {
     api.get("/indicators/team")
@@ -89,8 +90,8 @@ export default function PersonalIndicatorsPage() {
   }, []);
 
   useEffect(() => {
-    if (mode === "team" && !ov) api.get("/indicators/overview").then(r => setOv(r.data)).catch(() => setOv({ people: [] }));
-  }, [mode]);
+    if (mode === "team") api.get(`/indicators/overview?months=${teamMonths}`).then(r => setOv(r.data)).catch(() => setOv({ people: [] }));
+  }, [mode, teamMonths]);
 
   useEffect(() => {
     if (mode !== "team") return;
@@ -149,6 +150,11 @@ export default function PersonalIndicatorsPage() {
           {(ov.scope === "gestor" || groups.length > 1) && <option value="ALL">Todos os times</option>}
           {groups.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
+        <span style={{ width: 1, height: 22, background: T.border }} />
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Avaliar</span>
+        {[[1, "Mês"], [3, "Trimestre"], [6, "Semestre"], [12, "Ano"]].map(([k, lab]) => (
+          <button key={k} onClick={() => setTeamMonths(k)} style={{ background: teamMonths === k ? T.green : "transparent", color: teamMonths === k ? "#06140c" : T.t6, border: `1px solid ${teamMonths === k ? "transparent" : T.border}`, borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{lab}</button>
+        ))}
         <span style={{ width: 1, height: 22, background: T.border }} />
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Evolução</span>
         {[["month", "Mensal"], ["week", "Semanal"]].map(([k, lab]) => (

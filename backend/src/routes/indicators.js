@@ -307,40 +307,48 @@ router.get("/overview", requireAuth, (req, res) => {
   try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
 
   try {
-    const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
-    if (!latRow || !latRow.m) return res.json({ scope, scopeLabel, role: me.role, people: [] });
-    const latest = latRow.m.slice(0, 7);
+    const allMonths = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m DESC").all().map(r => r.m);
+    if (!allMonths.length) return res.json({ scope, scopeLabel, role: me.role, people: [] });
+    const latest = allMonths[0];
     const pm = prevMonthStr(latest);
-    const monthLabel = PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4);
+    // ?months=N — aggregate over the last N months (BI rule: SUM completed / SUM quota)
+    const monthsN = Math.max(1, Math.min(12, parseInt(req.query.months) || 1));
+    const rangeMonths = allMonths.slice(0, monthsN);
+    const mph = rangeMonths.map(() => "?").join(",");
+    const rangeLabel = monthsN === 1
+      ? PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4)
+      : PTM[+rangeMonths[rangeMonths.length - 1].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4);
 
     let desigs = d.prepare(
-      "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0"
-    ).all(latest + "-%");
+      `SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
+    ).all(...rangeMonths);
     if (memberNames) desigs = desigs.filter(x => memberNames.some(mn => nameMatch(mn, x.name)));
 
     const rankCache = {};
     const rankMap = (grp) => {
       if (rankCache[grp]) return rankCache[grp];
       const rows = d.prepare(
-        "SELECT designer_name name, AVG(progress)*100 ap FROM productivity WHERE group_no=? AND snapshot_date LIKE ? AND quota>0 GROUP BY designer_name ORDER BY ap DESC"
-      ).all(grp, latest + "-%");
+        `SELECT designer_name name, SUM(completed) c, SUM(quota) q FROM productivity WHERE group_no=? AND substr(snapshot_date,1,7) IN (${mph}) AND quota>0 GROUP BY designer_name HAVING q>0 ORDER BY (c*1.0/q) DESC`
+      ).all(grp, ...rangeMonths);
       const map = {}; rows.forEach((r, i) => { map[r.name] = i + 1; });
       return (rankCache[grp] = { map, size: rows.length });
     };
 
     const people = desigs.map(x => {
       const a = d.prepare(
-        "SELECT AVG(progress)*100 pct, SUM(new_case_count+mod_count+refinement_count) cases FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
-      ).get(x.name, latest + "-%");
-      const ap = d.prepare(
-        "SELECT AVG(progress)*100 pct FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
-      ).get(x.name, pm + "-%");
+        `SELECT SUM(completed) c, SUM(quota) q, SUM(new_case_count+mod_count+refinement_count) cases FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
+      ).get(x.name, ...rangeMonths);
+      const pct = a && a.q > 0 ? a.c / a.q * 100 : null;
+      const ap = monthsN === 1 ? d.prepare(
+        "SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
+      ).get(x.name, pm + "-%") : null;
+      const apPct = ap && ap.q > 0 ? ap.c / ap.q * 100 : null;
       const q = d.prepare(
-        "SELECT avg_score score, score_qty qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ? ORDER BY snapshot_date DESC LIMIT 1"
-      ).get(x.name, latest + "-%");
+        `SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND substr(snapshot_date,1,7) IN (${mph})`
+      ).get(x.name, ...rangeMonths);
       const wk = d.prepare(
-        "SELECT COALESCE(qty_low_score,0) low, COALESCE(score_qty,0) qty FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC LIMIT 12"
-      ).all(x.name);
+        `SELECT COALESCE(qty_low_score,0) low, COALESCE(score_qty,0) qty FROM quality_designer WHERE designer_name=? AND period_type='week' AND substr(snapshot_date,1,7) IN (${mph})`
+      ).all(x.name, ...rangeMonths);
       const low = wk.reduce((s, r) => s + r.low, 0), lqty = wk.reduce((s, r) => s + r.qty, 0);
       const dseries = d.prepare(
         "SELECT ROUND(progress*100) p FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date"
@@ -351,15 +359,15 @@ router.get("/overview", requireAuth, (req, res) => {
       const rm = rankMap(x.grp);
       return {
         name: x.name, grp: x.grp, lvl: x.lvl,
-        pct: round(a.pct), deltaPct: ap && ap.pct != null ? round(a.pct - ap.pct) : null,
+        pct: round(pct), deltaPct: pct != null && apPct != null ? round(pct - apPct) : null,
         rank: rm.map[x.name] || null, groupSize: rm.size,
-        score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0,
+        score: q && q.score != null ? round(q.score, 2) : null, qty: q ? q.qty : 0,
         lowRatePct: lqty ? Number((low / lqty * 100).toFixed(1)) : 0, lowTotal: low,
         cases: a.cases || 0, prodTrend: trendOf(dseries), qTrend: trendOf(qseries),
       };
     });
 
-    res.json({ scope, scopeLabel, role: me.role, monthLabel, people });
+    res.json({ scope, scopeLabel, role: me.role, monthLabel: rangeLabel, months: monthsN, people });
   } catch (e) {
     console.error("[indicators/overview]", e.message);
     res.status(500).json({ error: "Falha ao calcular a visão de gestão" });
@@ -406,7 +414,7 @@ router.get("/team-trend", requireAuth, (req, res) => {
     const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
     if (!latRow || !latRow.m) return res.json({ monthly: {}, weekly: {} });
     const latest = latRow.m.slice(0, 7);
-    const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m").all().map(r => r.m).slice(-6);
+    const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m").all().map(r => r.m).slice(-12);
 
     const monProd = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
     const monQual = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });

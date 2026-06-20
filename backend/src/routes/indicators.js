@@ -74,6 +74,57 @@ function trendOf(arr) {
 
 // Build the full personal-indicators bundle for one designer (used by /me and
 // by /person for the management drill-down). Returns the response object.
+// Quality-only panel for people without a design quota (e.g. QC reviewers):
+// they have quality_designer records but no productivity. attainment/volume are
+// null; the frontend hides those blocks and shows the quality side.
+function qualityOnlyBundle(d, inputName) {
+  let name = inputName;
+  if (!d.prepare("SELECT 1 FROM quality_designer WHERE designer_name=? LIMIT 1").get(name)) {
+    const alt = d.prepare("SELECT DISTINCT designer_name n FROM quality_designer").all().map(r => r.n).find(n => nameMatch(name, n));
+    if (alt) name = alt;
+  }
+  const idn = d.prepare("SELECT group_no, position FROM quality_designer WHERE designer_name=? ORDER BY snapshot_date DESC LIMIT 1").get(name);
+  if (!idn) return { hasData: false, name };
+  const group = idn.group_no;
+  const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE designer_name=? AND period_type='month' ORDER BY m").all(name).map(r => r.m);
+  if (!months.length) return { hasData: false, name };
+  const latest = months[months.length - 1];
+  const MN = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  const cap = (s) => s.replace(/^./, c => c.toUpperCase());
+  const dm = (ds) => ds.slice(8, 10) + "/" + ds.slice(5, 7);
+  const trend = (arr) => trendOf(arr.map(x => (x && typeof x === "object" ? x.score : x)));
+  const weeksLike = (like) => d.prepare("SELECT snapshot_date date, period_label label, ROUND(avg_score,2) score, COALESCE(score_qty,0) qty, COALESCE(qty_low_score,0) low, COALESCE(qty_unfit,0) unfit FROM quality_designer WHERE designer_name=? AND period_type='week' AND snapshot_date LIKE ? ORDER BY snapshot_date").all(name, like).map(r => { const m = (r.label || "").match(/\((\d{2})(\d{2})～(\d{2})(\d{2})\)/); const wk = (r.label || "").match(/w(\d+)/); return { date: r.date, week: wk ? ("S" + wk[1]) : "", range: m ? (m[2] + "/" + m[1] + "–" + m[4] + "/" + m[3]) : dm(r.date), score: r.score, qty: r.qty, low: r.low, unfit: r.unfit }; });
+  const qMonthLike = (like) => d.prepare("SELECT avg_score score, score_qty qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ? ORDER BY snapshot_date DESC LIMIT 1").get(name, like);
+  const qGroupLike = (like) => d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month' AND snapshot_date LIKE ?").get(group, like);
+  const lowAgg = (weeks) => { const total = weeks.reduce((s, w) => s + w.low, 0), totalQty = weeks.reduce((s, w) => s + w.qty, 0), totalUnfit = weeks.reduce((s, w) => s + w.unfit, 0); const wlow = weeks.filter(w => w.low > 0).length; let streak = 0; for (let i = weeks.length - 1; i >= 0; i--) { if (weeks[i].low === 0) streak++; else break; } let lastAgo = null; for (let i = weeks.length - 1, k = 0; i >= 0; i--, k++) { if (weeks[i].low > 0) { lastAgo = k; break; } } return { total, totalQty, totalUnfit, lowRatePct: totalQty ? Number((total / totalQty * 100).toFixed(1)) : 0, weeksWithLow: wlow, totalWeeks: weeks.length, streakNoLow: streak, lastLowWeeksAgo: lastAgo }; };
+  const prevMo = (mo) => prevMonthStr(mo);
+  const qBundle = (mo) => {
+    const like = mo + "-%";
+    const qc = qMonthLike(like), qp = qMonthLike(prevMo(mo) + "-%"), qg = qGroupLike(like);
+    const weeks = weeksLike(like);
+    return {
+      periodLabel: cap(MN[+mo.slice(5, 7) - 1]) + "/" + mo.slice(0, 4), monthShort: PTM[+mo.slice(5, 7) - 1], month: mo, isLatest: mo === latest,
+      attainment: null,
+      quality: qc ? { score: round(qc.score, 2), qty: qc.qty, delta: qp && qp.score != null ? round(qc.score - qp.score, 2) : null, groupAvg: round(qg ? qg.avg : null, 2), groupBest: round(qg ? qg.best : null, 2), trend: trend(weeks) } : null,
+      lowScore: lowAgg(weeks), cases: { new: 0, mod: 0, ref: 0 }, dailyProd: [], weeklyProd: [], weeklyLow: weeks,
+    };
+  };
+  const recent = months.slice(-6).reverse();
+  const byMonth = {}, monthsMeta = [];
+  recent.forEach(mo => { byMonth[mo] = qBundle(mo); monthsMeta.push({ key: mo, label: byMonth[mo].monthShort, full: byMonth[mo].periodLabel, isLatest: mo === latest }); });
+  const qualityMonthly = months.map(mo => { const q = qMonthLike(mo + "-%"); const w = weeksLike(mo + "-%"); const low = w.reduce((s, x) => s + x.low, 0), unf = w.reduce((s, x) => s + x.unfit, 0); return { date: mo + "-15", range: PTM[+mo.slice(5, 7) - 1], week: "", score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0, low, unfit: unf }; }).filter(x => x.score != null);
+  const weeklyLowAll = weeksLike("%");
+  const qAll = d.prepare("SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month'").get(name);
+  const qgAll = d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month'").get(group);
+  const monthly = {
+    periodLabel: "Acumulado · " + PTM[+months[0].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
+    attainment: null,
+    quality: qAll && qAll.score != null ? { score: round(qAll.score, 2), qty: qAll.qty, delta: null, groupAvg: round(qgAll ? qgAll.avg : null, 2), groupBest: round(qgAll ? qgAll.best : null, 2), trend: trend(qualityMonthly) } : null,
+    lowScore: lowAgg(weeklyLowAll), cases: { new: 0, mod: 0, ref: 0 }, monthsSeries: [], qualityMonthly, weeklyLowAll,
+  };
+  return { hasData: true, mode: "quality", name, group, level: idn.position || "QC", latest, monthsMeta, byMonth, monthly };
+}
+
 function buildPersonBundle(d, inputName) {
   let name = inputName;
   // Resolve the BI name (exact, else accent/subset match)
@@ -82,10 +133,10 @@ function buildPersonBundle(d, inputName) {
     if (alt) name = alt;
   }
   const idn = d.prepare("SELECT group_no, job_level FROM productivity WHERE designer_name=? ORDER BY snapshot_date DESC LIMIT 1").get(name);
-  if (!idn) return { hasData: false, name };
+  if (!idn) return qualityOnlyBundle(d, inputName);   // no productivity → try a quality-only panel (e.g. QC reviewers)
   const group = idn.group_no;
   const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE designer_name=? AND quota>0 ORDER BY m").all(name).map(r => r.m);
-  if (!months.length) return { hasData: false, name };
+  if (!months.length) return qualityOnlyBundle(d, inputName);
   const latest = months[months.length - 1];
 
   const dm = (ds) => ds.slice(8, 10) + "/" + ds.slice(5, 7);

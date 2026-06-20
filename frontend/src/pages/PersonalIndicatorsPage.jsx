@@ -151,8 +151,9 @@ export default function PersonalIndicatorsPage() {
         const month = (selMonth && d.byMonth[selMonth]) ? selMonth : d.latest;
         const S = isAcc ? d.monthly : d.byMonth[month];
         const a = S.attainment, q = S.quality, L = S.lowScore;
+        const qualityOnly = !a;   // QC reviewers (sem meta de produtividade)
         const monthName = isAcc ? "acumulado" : (S.periodLabel || "").split("/")[0];
-        const aboveAvg = a.groupAvg != null && a.pct >= a.groupAvg;
+        const aboveAvg = a && a.groupAvg != null && a.pct >= a.groupAvg;
         const qBelow = q && q.groupAvg != null && q.score < q.groupAvg;
         const pill = (on) => ({ background: on ? T.accent : "transparent", color: on ? "#06222e" : T.t6, border: `1px solid ${on ? "transparent" : T.border}`, borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" });
 
@@ -173,8 +174,8 @@ export default function PersonalIndicatorsPage() {
           <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Período</span>
-              {[["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["acc", "Acumulado"]].map(([k, lab]) => (
-                <button key={k} onClick={() => setGran(k)} style={pill(gran === k)}>{lab}</button>
+              {(qualityOnly ? [["week", "Semana"], ["month", "Mês"], ["acc", "Acumulado"]] : [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["acc", "Acumulado"]]).map(([k, lab]) => (
+                <button key={k} onClick={() => setGran(k)} style={pill(gran === k || (qualityOnly && gran === "day" && k === "week"))}>{lab}</button>
               ))}
             </div>
             {!isAcc && d.monthsMeta?.length > 1 && (
@@ -191,21 +192,23 @@ export default function PersonalIndicatorsPage() {
           <div style={{ ...card, marginBottom: 14, borderLeft: `3px solid ${T.accent}`, display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{ fontSize: 24 }}>💡</div>
             <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.55 }}>
-              Seu <b style={{ color: T.accent }}>volume está {a.trend === "up" ? "ascendente 📈" : a.trend === "down" ? "em queda 📉" : "estável"}</b> ({fmt(a.pct)}% da meta no mês), {aboveAvg ? "acima" : "abaixo"} da média do grupo · <b>{a.rank}º de {a.groupSize}</b>.
-              {q && <> Sua <b style={{ color: T.amber }}>qualidade ({fmt(q.score, 2)})</b> está {qBelow ? "abaixo da média do grupo e " : ""}{q.trend === "down" ? "em leve queda 📉" : q.trend === "up" ? "subindo 📈" : "estável"}{qBelow ? " — esse é o seu foco." : "."}</>}
+              {qualityOnly
+                ? <>Acompanhe sua <b style={{ color: T.amber }}>qualidade</b> — você não tem meta de produtividade (volume), então o painel foca na nota.{q && <> Sua nota é <b style={{ color: T.amber }}>{fmt(q.score, 2)}</b>, {qBelow ? "abaixo" : "acima/na"} da média do grupo, {q.trend === "down" ? "em leve queda 📉" : q.trend === "up" ? "subindo 📈" : "estável"}.</>}</>
+                : <>Seu <b style={{ color: T.accent }}>volume está {a.trend === "up" ? "ascendente 📈" : a.trend === "down" ? "em queda 📉" : "estável"}</b> ({fmt(a.pct)}% da meta no mês), {aboveAvg ? "acima" : "abaixo"} da média do grupo · <b>{a.rank}º de {a.groupSize}</b>.
+                  {q && <> Sua <b style={{ color: T.amber }}>qualidade ({fmt(q.score, 2)})</b> está {qBelow ? "abaixo da média do grupo e " : ""}{q.trend === "down" ? "em leve queda 📉" : q.trend === "up" ? "subindo 📈" : "estável"}{qBelow ? " — esse é o seu foco." : "."}</>}</>}
             </div>
           </div>
 
           {/* KPIs */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
-            <div style={card}>
+          <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
+            {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.accent)} />Atingimento (volume)</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.accent }}>{fmt(a.pct)}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 {a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · meta 100%
               </div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{fmt(a.completed, 1)} casos · {a.days} dias</div>
-            </div>
+            </div>}
             <div style={card}>
               <div style={h3}><span style={dot(T.amber)} />Qualidade (nota)</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{q ? fmt(q.score, 2) : "—"}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
@@ -219,22 +222,22 @@ export default function PersonalIndicatorsPage() {
                   : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: T.t1 + "12", color: T.t3 }}>última nota baixa: {L.lastLowWeeksAgo === 0 ? "período atual" : L.lastLowWeeksAgo == null ? "nunca" : `${L.lastLowWeeksAgo} sem atrás`}</span>}
               </div>}
             </div>
-            <div style={card}>
+            {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.green)} />Posição no grupo</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.green }}>{a.rank}º</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/{a.groupSize}</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2 }}>em produtividade · {d.group}</div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{a.rank <= Math.ceil(a.groupSize * 0.2) ? "top 20% 🔥 mantenha o ritmo" : "subindo no ranking"}</div>
-            </div>
+            </div>}
           </div>
 
           {/* Comparativo */}
           <div style={{ ...card, marginBottom: 14 }}>
             <div style={h3}><span style={dot(T.violet)} />Você vs o grupo {d.group} — média &amp; melhor</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
-              <RangeBar T={T} label="Atingimento (volume)" valueLabel={`você ${fmt(a.pct)}%`} valueColor={T.accent}
+            <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,520px)" : "1fr 1fr", gap: 26 }}>
+              {!qualityOnly && <RangeBar T={T} label="Atingimento (volume)" valueLabel={`você ${fmt(a.pct)}%`} valueColor={T.accent}
                 fillPct={a.pct / a.groupBest * 100} markerPct={a.groupAvg / a.groupBest * 100}
                 scale={["0", `média ${fmt(a.groupAvg)}%`, `melhor ${fmt(a.groupBest)}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`}
-                note={aboveAvg ? `▲ +${fmt(a.pct - a.groupAvg)} p.p. acima da média` : `▼ ${fmt(a.groupAvg - a.pct)} p.p. abaixo da média`} noteColor={aboveAvg ? T.green : T.red} />
+                note={aboveAvg ? `▲ +${fmt(a.pct - a.groupAvg)} p.p. acima da média` : `▼ ${fmt(a.groupAvg - a.pct)} p.p. abaixo da média`} noteColor={aboveAvg ? T.green : T.red} />}
               {q && <RangeBar T={T} label="Qualidade (nota)" valueLabel={`você ${fmt(q.score, 2)}`} valueColor={T.amber}
                 fillPct={(q.score - 7) / 3 * 100} markerPct={(q.groupAvg - 7) / 3 * 100}
                 scale={["7,0", `média ${fmt(q.groupAvg, 2)}`, `melhor ${fmt(q.groupBest, 2)}`]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`}
@@ -243,11 +246,11 @@ export default function PersonalIndicatorsPage() {
           </div>
 
           {/* Charts */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-            <div style={card}>
+          <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
+            {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.accent)} />{prodTitle}</div>
               {prodData.length ? <BarChart data={prodData} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados no período</div>}
-            </div>
+            </div>}
             <div style={card}>
               <div style={h3}><span style={dot(T.amber)} />{qTitle}</div>
               {qData.length ? <LineChart data={qData} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem avaliações de qualidade ainda</div>}
@@ -255,8 +258,8 @@ export default function PersonalIndicatorsPage() {
           </div>
 
           {/* Volume + caminho */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-            <div style={card}>
+          <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,560px)" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
+            {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.violet)} />Volume por tipo — {monthName}</div>
               {[["Casos novos", S.cases.new, T.accent], ["Modificações", S.cases.mod, T.violet], ["Refinamentos", S.cases.ref, T.green]].map(([lab, v, c]) => {
                 const max = Math.max(S.cases.new, S.cases.mod, S.cases.ref, 1);
@@ -266,15 +269,16 @@ export default function PersonalIndicatorsPage() {
                 </div>;
               })}
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 12 }}>Total: {S.cases.new + S.cases.mod + S.cases.ref} casos · {monthName}</div>
-            </div>
+            </div>}
             <div style={card}>
               <div style={h3}><span style={dot(T.green)} />Seu caminho a seguir</div>
               {[
                 q && q.score < 9 ? ["🎯", T.amber, "Buscar nota 9,0 (excelência)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`] : null,
                 q && L.lowRatePct >= 10 ? ["⚠️", T.red, `Reduzir notas baixas: ${fmt(L.lowRatePct)}% → <10%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
-                ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`],
-              ].filter(Boolean).map(([ic, c, t, p], i) => (
-                <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 0", borderBottom: i < 2 ? `1px solid ${T.border}` : "none" }}>
+                a ? ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`] : null,
+                qualityOnly && q ? ["🛡️", T.violet, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,
+              ].filter(Boolean).map(([ic, c, t, p], i, arr) => (
+                <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.border}` : "none" }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, background: c + "22" }}>{ic}</div>
                   <div><b style={{ fontSize: 13, color: T.t1 }}>{t}</b><p style={{ fontSize: 11.5, color: T.t2, marginTop: 3, lineHeight: 1.45 }}>{p}</p></div>
                 </div>

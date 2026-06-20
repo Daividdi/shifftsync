@@ -366,4 +366,67 @@ router.get("/overview", requireAuth, (req, res) => {
   }
 });
 
+// GET /api/indicators/team-trend?group=BR-ATD-BR4 — aggregated time series for the
+// caller's scope (gestor: all; leader: their team), with company comparison.
+router.get("/team-trend", requireAuth, (req, res) => {
+  const ss = getDb();
+  const me = ss.prepare("SELECT id, role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
+  const GESTOR = new Set(["gerencia", "hr", "ti"]);
+  let memberNames = null;
+  if (!GESTOR.has(me.role)) {
+    const led = ss.prepare(`
+      SELECT g.id FROM groups g WHERE g.leader_id=?
+      UNION SELECT g.id FROM groups g JOIN group_co_leaders cl ON cl.group_id=g.id WHERE cl.user_id=?
+    `).all(req.user.id, req.user.id);
+    if (!led.length) return res.status(403).json({ error: "Sem visão de time" });
+    const ids = led.map(g => g.id), ph = ids.map(() => "?").join(",");
+    memberNames = ss.prepare(
+      `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id=gm.user_id
+       WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name!=''`
+    ).all(...ids).map(r => r.fn);
+  }
+
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+  try {
+    const group = (req.query.group || "").trim() || null;
+    let scopeNames = null;
+    if (memberNames) {
+      const allDesig = d.prepare("SELECT DISTINCT designer_name name FROM productivity").all().map(r => r.name);
+      scopeNames = allDesig.filter(n => memberNames.some(mn => nameMatch(mn, n)));
+      if (!scopeNames.length) scopeNames = ["__none__"];
+    }
+    const where = () => {
+      const parts = [], params = [];
+      if (scopeNames) { parts.push(`designer_name IN (${scopeNames.map(() => "?").join(",")})`); params.push(...scopeNames); }
+      if (group) { parts.push("group_no = ?"); params.push(group); }
+      return { clause: parts.length ? " AND " + parts.join(" AND ") : "", params };
+    };
+    const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
+    if (!latRow || !latRow.m) return res.json({ monthly: {}, weekly: {} });
+    const latest = latRow.m.slice(0, 7);
+    const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m").all().map(r => r.m).slice(-6);
+
+    const monProd = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
+    const monQual = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
+    const compProd = months.map(mo => { const r = d.prepare("SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
+    const compQual = months.map(mo => { const r = d.prepare("SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
+
+    const wkDates = d.prepare("SELECT DISTINCT snapshot_date FROM quality_designer WHERE period_type='week' ORDER BY snapshot_date DESC LIMIT 12").all().map(r => r.snapshot_date).reverse();
+    const wkQual = wkDates.map(dt => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='week' AND snapshot_date=?${w.clause}`).get(dt, ...w.params); return [dt.slice(8, 10) + "/" + dt.slice(5, 7), round(r && r.s, 2)]; });
+    const w2 = where();
+    const wkProd = d.prepare(`SELECT MIN(snapshot_date) ws, AVG(progress)*100 p FROM productivity WHERE quota>0${w2.clause} GROUP BY strftime('%Y-%W', snapshot_date) ORDER BY ws DESC LIMIT 8`).all(...w2.params).reverse().map(r => [r.ws.slice(8, 10) + "/" + r.ws.slice(5, 7), round(r.p)]);
+
+    res.json({
+      monthLabel: PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
+      monthly: { prod: monProd, qual: monQual, companyProd: compProd, companyQual: compQual },
+      weekly: { prod: wkProd, qual: wkQual },
+    });
+  } catch (e) {
+    console.error("[indicators/team-trend]", e.message);
+    res.status(500).json({ error: "Falha ao calcular evolução do time" });
+  }
+});
+
 module.exports = router;

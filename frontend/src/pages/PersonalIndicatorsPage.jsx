@@ -75,12 +75,30 @@ export default function PersonalIndicatorsPage() {
   const [gran, setGran] = useState("day");         // day | week | month | acc
   const [selMonth, setSelMonth] = useState(null);  // YYYY-MM (null => latest)
   const [state, setState] = useState({ loading: true });
+  const [mode, setMode] = useState("individual");  // individual | team
+  const [ov, setOv] = useState(null);              // overview (roster + métricas)
+  const [trend, setTrend] = useState(null);        // team-trend (evolução)
+  const [teamGroup, setTeamGroup] = useState("ALL");
+  const [teamGran, setTeamGran] = useState("month"); // month | week
+  const [teamSort, setTeamSort] = useState({ k: "pct", dir: -1 });
 
   useEffect(() => {
     api.get("/indicators/team")
       .then(r => setTeam(r.data))
       .catch(() => setTeam({ canManage: false, people: [] }));
   }, []);
+
+  useEffect(() => {
+    if (mode === "team" && !ov) api.get("/indicators/overview").then(r => setOv(r.data)).catch(() => setOv({ people: [] }));
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "team") return;
+    const q = teamGroup && teamGroup !== "ALL" ? `?group=${encodeURIComponent(teamGroup)}` : "";
+    api.get(`/indicators/team-trend${q}`).then(r => setTrend(r.data)).catch(() => setTrend(null));
+  }, [mode, teamGroup]);
+
+  const openPerson = (name) => { setViewName(name); setMode("individual"); };
 
   useEffect(() => {
     setState({ loading: true });
@@ -96,6 +114,85 @@ export default function PersonalIndicatorsPage() {
   const card = { background: `linear-gradient(180deg, ${T.bgCard}, ${T.bgDeep})`, border: `1px solid ${T.border}`, borderRadius: 18, padding: "18px 18px 16px" };
   const h3 = { fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: T.t7, marginBottom: 12, display: "flex", alignItems: "center", gap: 7 };
   const dot = (c) => ({ width: 7, height: 7, borderRadius: "50%", background: c, display: "inline-block" });
+  const last = (a) => (a && a.length ? a[a.length - 1] : undefined);
+  const grpShort = (g) => (g || "").replace("BR-ATD-", "").replace("BR-", "");
+
+  function renderTeam() {
+    if (!ov) return <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>Carregando dados do time…</div>;
+    const people = ov.people || [];
+    const groups = [...new Set(people.map(p => p.grp))].sort();
+    const rows = teamGroup === "ALL" ? people : people.filter(p => p.grp === teamGroup);
+    const sorted = [...rows].sort((a, b) => { const k = teamSort.k; let x = a[k], y = b[k]; if (x == null) x = typeof y === "string" ? "" : -1; if (y == null) y = typeof x === "string" ? "" : -1; return typeof x === "string" ? teamSort.dir * x.localeCompare(y) : teamSort.dir * (x - y); });
+    const avg = (f) => { const v = rows.map(f).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+    const n = rows.length, mAtt = avg(p => p.pct), mQ = avg(p => p.score), acima = rows.filter(p => p.pct >= 100).length, aten = rows.filter(p => p.pct < 100 || p.lowRatePct >= 10).length;
+    const prodSeries = (teamGran === "month" ? trend?.monthly?.prod : trend?.weekly?.prod) || [];
+    const qualSeries = (teamGran === "month" ? trend?.monthly?.qual : trend?.weekly?.qual) || [];
+    const sortKey = (k) => setTeamSort(s => s.k === k ? { k, dir: -s.dir } : { k, dir: (k === "name" || k === "grp") ? 1 : -1 });
+    const tP = last(trend?.monthly?.prod)?.[1], cP = last(trend?.monthly?.companyProd)?.[1];
+    const tQ = last(trend?.monthly?.qual)?.[1], cQ = last(trend?.monthly?.companyQual)?.[1];
+    return <>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", ...card, padding: "12px 16px", marginBottom: 14 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Time</span>
+        <select value={teamGroup} onChange={e => setTeamGroup(e.target.value)} style={{ background: T.bgDeep, color: T.t1, border: `1px solid ${T.border}`, borderRadius: 9, padding: "7px 11px", fontSize: 13, fontWeight: 600 }}>
+          {(ov.scope === "gestor" || groups.length > 1) && <option value="ALL">Todos os times</option>}
+          {groups.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <span style={{ width: 1, height: 22, background: T.border }} />
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Evolução</span>
+        {[["month", "Mensal"], ["week", "Semanal"]].map(([k, lab]) => (
+          <button key={k} onClick={() => setTeamGran(k)} style={{ background: teamGran === k ? T.accent : "transparent", color: teamGran === k ? "#06222e" : T.t6, border: `1px solid ${teamGran === k ? "transparent" : T.border}`, borderRadius: 9, padding: "6px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{lab}</button>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 14 }}>
+        {[["👥 Colaboradores", n, T.t1, teamGroup === "ALL" ? `${groups.length} times` : grpShort(teamGroup)],
+          ["🎯 Atingimento médio", fmt(mAtt) + "%", mAtt >= 100 ? T.green : T.amber, `${acima} de ${n} acima da meta`],
+          ["⭐ Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "média de nota do time"],
+          ["⚠️ Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo da meta ou baixas <6"]].map(([l, v, c, f], i) => (
+          <div key={i} style={card}><div style={h3}>{l}</div><div style={{ fontSize: 30, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 11, color: T.t6, marginTop: 7 }}>{f}</div></div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+        <div style={card}><div style={h3}><span style={dot(T.accent)} />Evolução — atingimento ({teamGran === "month" ? "mês" : "semana"})</div>{prodSeries.length ? <BarChart data={prodSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
+        <div style={card}><div style={h3}><span style={dot(T.amber)} />Evolução — qualidade ({teamGran === "month" ? "mês" : "semana"})</div>{qualSeries.length ? <LineChart data={qualSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
+      </div>
+
+      {(tP != null && cP != null) || (tQ != null && cQ != null) ? <div style={{ ...card, marginBottom: 14 }}>
+        <div style={h3}><span style={dot(T.violet)} />Time vs empresa — {trend?.monthLabel}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
+          {tP != null && cP != null && <RangeBar T={T} label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
+          {tQ != null && cQ != null && <RangeBar T={T} label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 7) / 3 * 100} markerPct={(cQ - 7) / 3 * 100} scale={["7,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
+        </div>
+      </div> : null}
+
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        <div style={{ ...h3, margin: 0, padding: "16px 18px" }}><span style={dot(T.green)} />Ranking da equipe — clique para abrir o painel individual</div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr>
+              {[["name", "Colaborador"], ["grp", "Equipe"], ["pct", "Atingimento"], ["rank", "Posição"], ["score", "Qualidade"], ["lowRatePct", "Notas baixas"]].map(([k, lab]) => (
+                <th key={k} onClick={() => sortKey(k)} style={{ padding: "11px 14px", textAlign: (k === "name" || k === "grp") ? "left" : "right", color: T.t9, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer", whiteSpace: "nowrap", borderBottom: `1px solid ${T.border}`, background: T.bgDeep, userSelect: "none" }}>{lab}{teamSort.k === k ? (teamSort.dir < 0 ? " ▾" : " ▴") : ""}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {sorted.map(p => { const warn = p.pct < 100 || p.lowRatePct >= 10; return (
+                <tr key={p.name} onClick={() => openPerson(p.name)} style={{ cursor: "pointer", background: warn ? T.red + "0c" : "transparent", borderBottom: `1px solid ${T.borderRow || T.border}` }}>
+                  <td style={{ padding: "10px 14px", fontWeight: 700, color: T.t1, whiteSpace: "nowrap" }}>{p.name}</td>
+                  <td style={{ padding: "10px 14px" }}><span style={{ fontSize: 11, fontWeight: 700, color: T.t7 || T.t8, background: T.bgDeep, border: `1px solid ${T.border}`, padding: "2px 8px", borderRadius: 6 }}>{grpShort(p.grp)}</span></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.pct >= 100 ? T.green : p.pct >= 80 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{p.pct}%</b></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", color: T.t2, fontVariantNumeric: "tabular-nums" }}>{p.rank ? `${p.rank}º/${p.groupSize}` : "—"}</td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.score >= 8 ? T.green : T.amber, fontVariantNumeric: "tabular-nums" }}>{p.score != null ? fmt(p.score, 2) : "—"}</b></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", color: p.lowRatePct >= 10 ? T.red : p.lowRatePct > 0 ? T.amber : T.t8, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(p.lowRatePct, 1)}% <span style={{ color: T.t9, fontWeight: 400 }}>({p.lowTotal})</span></td>
+                </tr>
+              ); })}
+              {!sorted.length && <tr><td colSpan={6} style={{ padding: 30, textAlign: "center", color: T.t6 }}>Sem colaboradores no time.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>;
+  }
 
   return (
     <div style={{ padding: 28 }}>
@@ -104,12 +201,18 @@ export default function PersonalIndicatorsPage() {
         <div style={{ flex: 1, minWidth: 260 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
             <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={18} /></span>
-            {viewName ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
+            {mode === "team" ? "Visão do Time" : viewName ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
           </h1>
-          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{viewName ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
+          <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{mode === "team" ? "Ranking, evolução e comparativos da equipe" : viewName ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
           {team?.canManage && (
             <div style={{ marginTop: 13, display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 12, color: T.t7, fontWeight: 600 }}>Ver indicadores de:</span>
+              <div style={{ display: "inline-flex", background: T.bgDeep, border: `1px solid ${T.border}`, borderRadius: 9, padding: 3, gap: 2 }}>
+                {[["individual", "Individual"], ["team", "Visão do Time"]].map(([k, lab]) => (
+                  <button key={k} onClick={() => setMode(k)} style={{ background: mode === k ? T.accent : "transparent", color: mode === k ? "#06222e" : T.t6, border: "none", borderRadius: 7, padding: "6px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{lab}</button>
+                ))}
+              </div>
+              {mode === "individual" && <span style={{ fontSize: 12, color: T.t7, fontWeight: 600 }}>Ver indicadores de:</span>}
+              {mode === "individual" &&
               <select value={viewName || ""} onChange={(e) => setViewName(e.target.value || null)}
                 style={{ background: T.bgDeep, color: T.t1, border: `1px solid ${T.border}`, borderRadius: 9, padding: "8px 12px", fontSize: 13, fontWeight: 600, minWidth: 240, cursor: "pointer" }}>
                 <option value="">— Meus indicadores —</option>
@@ -118,8 +221,8 @@ export default function PersonalIndicatorsPage() {
                     {peopleByTeam[g].map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
                   </optgroup>
                 ))}
-              </select>
-              {viewName && (
+              </select>}
+              {mode === "individual" && viewName && (
                 <button onClick={() => setViewName(null)} style={{ background: "transparent", border: `1px solid ${T.border}`, color: T.t6, borderRadius: 9, padding: "8px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
                   limpar
                 </button>
@@ -127,18 +230,20 @@ export default function PersonalIndicatorsPage() {
             </div>
           )}
         </div>
-        {d?.hasData && <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 13, padding: "7px 14px 7px 7px" }}>
+        {mode === "individual" && d?.hasData && <div style={{ display: "flex", alignItems: "center", gap: 10, background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 13, padding: "7px 14px 7px 7px" }}>
           <div style={{ width: 40, height: 40, borderRadius: 11, background: T.accentGradient, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#06222e" }}>{initials(d.name)}</div>
           <div><b style={{ fontSize: 13.5, color: T.t1 }}>{d.name}</b><div style={{ fontSize: 11, color: T.t6 }}>{d.group} · {d.level}</div></div>
         </div>}
       </div>
 
-      {state.loading && <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>
+      {mode === "team" && renderTeam()}
+
+      {mode === "individual" && state.loading && <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>
         <div style={{ width: 36, height: 36, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", margin: "0 auto 14px", animation: "spin .7s linear infinite" }} />Carregando seus indicadores…</div>}
 
-      {state.error && <div style={{ textAlign: "center", padding: "60px 0", color: T.red }}>{state.error}</div>}
+      {mode === "individual" && state.error && <div style={{ textAlign: "center", padding: "60px 0", color: T.red }}>{state.error}</div>}
 
-      {!state.loading && d && !d.hasData && <div style={{ textAlign: "center", padding: "60px 20px", color: T.t4 }}>
+      {mode === "individual" && !state.loading && d && !d.hasData && <div style={{ textAlign: "center", padding: "60px 20px", color: T.t4 }}>
         <div style={{ fontSize: 34, marginBottom: 10 }}>📊</div>
         {team?.canManage && !viewName
           ? <>Selecione um colaborador no seletor acima para ver os indicadores detalhados dele.</>
@@ -146,7 +251,7 @@ export default function PersonalIndicatorsPage() {
             <span style={{ fontSize: 12, color: T.t6 }}>Assim que a planilha do BI for carregada com os resultados, eles aparecem aqui.</span></>}
       </div>}
 
-      {!state.loading && d?.hasData && (() => {
+      {mode === "individual" && !state.loading && d?.hasData && (() => {
         const isAcc = gran === "acc";
         const month = (selMonth && d.byMonth[selMonth]) ? selMonth : d.latest;
         const S = isAcc ? d.monthly : d.byMonth[month];

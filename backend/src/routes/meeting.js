@@ -8,8 +8,23 @@ const router = express.Router();
 function isAdmin(role)  { return role === "hr" || role === "ti"; }
 function isLeader(role) { return role === "leader" || role === "gerencia" || isAdmin(role); }
 
+function ensurePart(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS meeting_participants (booking_id TEXT NOT NULL, user_id TEXT NOT NULL, PRIMARY KEY (booking_id, user_id))");
+}
+function notifyParticipants(db, userIds, type, title, body, refId) {
+  const ins = db.prepare("INSERT INTO notifications (id, user_id, type, ref_id, title, body) VALUES (?,?,?,?,?,?)");
+  try { db.transaction(() => { for (const uid of userIds) ins.run(uuidv4(), uid, type, refId, title, body); })(); }
+  catch (e) { console.error("[meeting notify]", e.message); }
+}
+
 function fmt(b, db) {
   const user = db.prepare("SELECT full_name, username FROM users WHERE id=?").get(b.created_by);
+  let participants = [];
+  try {
+    participants = db.prepare(
+      "SELECT u.id, u.full_name name FROM meeting_participants mp JOIN users u ON u.id=mp.user_id WHERE mp.booking_id=? ORDER BY u.full_name"
+    ).all(b.id);
+  } catch { /* tabela ainda não criada */ }
   return {
     id: b.id, title: b.title, description: b.description,
     date: b.date, startTime: b.start_time, endTime: b.end_time,
@@ -18,6 +33,7 @@ function fmt(b, db) {
     createdByName: user?.full_name || b.created_by,
     createdByUsername: user?.username,
     createdAt: b.created_at,
+    participants,
   };
 }
 
@@ -98,7 +114,7 @@ router.get("/conflicts", requireAuth, (req, res) => {
 router.post("/", requireAuth, (req, res) => {
   if (!isLeader(req.user.role)) return res.status(403).json({ error: "Sem permissão" });
 
-  const { title, description, date, startTime, endTime, recurrence = "none", recurrenceEnd } = req.body;
+  const { title, description, date, startTime, endTime, recurrence = "none", recurrenceEnd, participants } = req.body;
   if (!title || !date || !startTime || !endTime)
     return res.status(400).json({ error: "title, date, startTime e endTime obrigatórios" });
   if (startTime >= endTime)
@@ -125,6 +141,19 @@ router.post("/", requireAuth, (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, title, description||null, date, startTime, endTime, recurrence, recurrenceEnd||null, req.user.id);
 
+  // Participantes + alerta
+  const partIds = Array.isArray(participants) ? [...new Set(participants.filter(Boolean))] : [];
+  if (partIds.length) {
+    ensurePart(db);
+    const ip = db.prepare("INSERT OR IGNORE INTO meeting_participants (booking_id, user_id) VALUES (?,?)");
+    db.transaction(() => { for (const uid of partIds) ip.run(id, uid); })();
+    const creator = db.prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id)?.full_name || "Alguém";
+    const recur = recurrence !== "none" ? ` · recorrente (${recurrence === "weekly" ? "semanal" : "mensal"})` : "";
+    const title2 = `📅 Reunião: ${title}`;
+    const body2 = `${date} · ${startTime}–${endTime}${recur}${description ? " · " + description : ""} — convidado por ${creator}`;
+    notifyParticipants(db, partIds, "meeting_invite", title2, body2, id);
+  }
+
   return res.status(201).json(fmt(db.prepare("SELECT * FROM meeting_bookings WHERE id=?").get(id), db));
 });
 
@@ -135,6 +164,11 @@ router.delete("/:id", requireAuth, (req, res) => {
   if (!b) return res.status(404).json({ error: "Reserva não encontrada" });
   if (b.created_by !== req.user.id && !isAdmin(req.user.role))
     return res.status(403).json({ error: "Sem permissão" });
+  // Avisa os participantes do cancelamento e limpa
+  ensurePart(db);
+  const parts = db.prepare("SELECT user_id FROM meeting_participants WHERE booking_id=?").all(req.params.id).map(r => r.user_id);
+  if (parts.length) notifyParticipants(db, parts, "meeting_cancel", `❌ Reunião cancelada: ${b.title}`, `${b.date} · ${b.start_time}–${b.end_time} foi cancelada`, req.params.id);
+  db.prepare("DELETE FROM meeting_participants WHERE booking_id=?").run(req.params.id);
   db.prepare("DELETE FROM meeting_bookings WHERE id=?").run(req.params.id);
   return res.json({ ok: true });
 });

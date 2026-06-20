@@ -90,6 +90,9 @@ function EventBlock({ booking, onDelete, canDelete, style={} }) {
       <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{booking.title}</div>
       <div style={{color:T.t9,fontSize:10}}>{fmtTime(booking.startTime)}–{fmtTime(booking.endTime)}</div>
       <div style={{color:T.t9,fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{booking.createdByName}</div>
+      {booking.participants?.length>0&&(
+        <div title={booking.participants.map(p=>p.name).join(", ")} style={{color:T.t9,fontSize:10,marginTop:1}}>👥 {booking.participants.length} participante{booking.participants.length>1?"s":""}</div>
+      )}
       {booking.recurrence!=="none"&&(
         <span style={{fontSize:9,padding:"1px 5px",borderRadius:8,background:color+"22",color,marginTop:2,display:"inline-block"}}>
           {booking.recurrence==="weekly"?"Semanal":"Mensal"}
@@ -106,12 +109,18 @@ function EventBlock({ booking, onDelete, canDelete, style={} }) {
 }
 
 function BookingForm({ onSave, onCancel, T, user }) {
-  const [form, setForm]         = useState({ title:"", description:"", date:new Date().toISOString().slice(0,10), startTime:"09:00", endTime:"10:00", recurrence:"none", recurrenceEnd:"" });
+  const [form, setForm]         = useState({ title:"", description:"", date:new Date().toISOString().slice(0,10), startTime:"09:00", endTime:"10:00", recurrence:"none", recurrenceEnd:"", participants:[] });
   const [conflicts, setConflicts] = useState([]);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [users, setUsers]       = useState([]);
+  const [partSearch, setPartSearch] = useState("");
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const toggleP = (id) => setForm(f=>({ ...f, participants: f.participants.includes(id) ? f.participants.filter(x=>x!==id) : [...f.participants, id] }));
+
+  useEffect(() => { api.get("/users").then(r=>setUsers((r.data||[]).filter(u=>u.full_name && u.id!==user?.id))).catch(()=>{}); }, [user?.id]);
+  const filteredUsers = users.filter(u=>u.full_name.toLowerCase().includes(partSearch.toLowerCase())).slice(0,50);
 
   useEffect(() => {
     if (!form.date||!form.startTime||!form.endTime) return;
@@ -185,6 +194,30 @@ function BookingForm({ onSave, onCancel, T, user }) {
             <input type="date" value={form.recurrenceEnd} onChange={e=>set("recurrenceEnd",e.target.value)} style={inputStyle}/>
           </div>
         )}
+
+        <div style={{gridColumn:"1/-1"}}>
+          <label style={labelStyle}>PARTICIPANTES (recebem um alerta da reunião)</label>
+          {form.participants.length>0&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {form.participants.map(id=>{const u=users.find(x=>x.id===id);return (
+                <span key={id} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,background:T.accent+"22",color:T.accent,borderRadius:20,padding:"3px 6px 3px 11px"}}>
+                  {u?.full_name||id}
+                  <button onClick={()=>toggleP(id)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                </span>);})}
+            </div>
+          )}
+          <input value={partSearch} onChange={e=>setPartSearch(e.target.value)} placeholder="Buscar e selecionar pessoas..." style={inputStyle}/>
+          {partSearch&&(
+            <div style={{maxHeight:170,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,marginTop:6,background:T.bgDeep}}>
+              {filteredUsers.length?filteredUsers.map(u=>(
+                <div key={u.id} onClick={()=>toggleP(u.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 11px",cursor:"pointer",fontSize:12,color:T.t2,borderBottom:`1px solid ${T.border}`}}>
+                  <input type="checkbox" readOnly checked={form.participants.includes(u.id)} style={{accentColor:T.accent}}/>
+                  {u.full_name}
+                </div>
+              )):<div style={{padding:"8px 11px",fontSize:12,color:T.t9}}>Ninguém encontrado</div>}
+            </div>
+          )}
+        </div>
 
         <div style={{gridColumn:"1/-1"}}>
           <label style={labelStyle}>DESCRIÇÃO / PAUTA (opcional)</label>

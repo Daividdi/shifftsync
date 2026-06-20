@@ -175,7 +175,9 @@ function buildPersonBundle(d, inputName) {
 
   const curAll = aggLike("%"), compAll = rankLike("%");
   const monthsSeries = months.map(mo => [PTM[+mo.slice(5, 7) - 1], round(aggLike(mo + "-%").pct)]);
-  const qualityMonthly = months.map(mo => { const q = qMonthLike(mo + "-%"); const w = weeksLike(mo + "-%"); const low = w.reduce((s, x) => s + x.low, 0), unf = w.reduce((s, x) => s + x.unfit, 0); return { date: mo + "-15", range: PTM[+mo.slice(5, 7) - 1], week: "", score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0, low, unfit: unf }; }).filter(x => x.score != null);
+  // Quality has its own (usually longer) history — don't cap it to productivity months
+  const qMonthsAll = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE designer_name=? AND period_type='month' ORDER BY m").all(name).map(r => r.m);
+  const qualityMonthly = qMonthsAll.map(mo => { const q = qMonthLike(mo + "-%"); const w = weeksLike(mo + "-%"); const low = w.reduce((s, x) => s + x.low, 0), unf = w.reduce((s, x) => s + x.unfit, 0); return { date: mo + "-15", range: PTM[+mo.slice(5, 7) - 1], week: "", score: q ? round(q.score, 2) : null, qty: q ? q.qty : 0, low, unfit: unf }; }).filter(x => x.score != null);
   const weeklyLowAll = weeksLike("%");
   const qAll = d.prepare("SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month'").get(name);
   const qgAll = d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month'").get(group);
@@ -432,10 +434,11 @@ router.get("/team-trend", requireAuth, (req, res) => {
     const latest = latRow.m.slice(0, 7);
     const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m").all().map(r => r.m).slice(-12);
 
+    const qMonths = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE period_type='month' ORDER BY m").all().map(r => r.m).slice(-12);
     const monProd = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
-    const monQual = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
+    const monQual = qMonths.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
     const compProd = months.map(mo => { const r = d.prepare("SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
-    const compQual = months.map(mo => { const r = d.prepare("SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
+    const compQual = qMonths.map(mo => { const r = d.prepare("SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
 
     const wkDates = d.prepare("SELECT DISTINCT snapshot_date FROM quality_designer WHERE period_type='week' ORDER BY snapshot_date DESC LIMIT 12").all().map(r => r.snapshot_date).reverse();
     const wkQual = wkDates.map(dt => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='week' AND snapshot_date=?${w.clause}`).get(dt, ...w.params); return [dt.slice(8, 10) + "/" + dt.slice(5, 7), round(r && r.s, 2)]; });

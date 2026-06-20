@@ -43,7 +43,7 @@ function LineChart({ data, T }) {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
       {[7, 8, 9, 10].map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
-      <line x1={PX} y1={Y(9)} x2={W - PX} y2={Y(9)} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
+      <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
       <path d={path} fill="none" stroke={T.amber} strokeWidth="2.5" strokeLinejoin="round" />
       {data.map(([date, s], i) => <circle key={i} cx={(PX + i * cw).toFixed(1)} cy={Y(s).toFixed(1)} r="3.4" fill={T.bgCard} stroke={T.amber} strokeWidth="2" />)}
     </svg>
@@ -124,7 +124,7 @@ export default function PersonalIndicatorsPage() {
     const rows = teamGroup === "ALL" ? people : people.filter(p => p.grp === teamGroup);
     const sorted = [...rows].sort((a, b) => { const k = teamSort.k; let x = a[k], y = b[k]; if (x == null) x = typeof y === "string" ? "" : -1; if (y == null) y = typeof x === "string" ? "" : -1; return typeof x === "string" ? teamSort.dir * x.localeCompare(y) : teamSort.dir * (x - y); });
     const avg = (f) => { const v = rows.map(f).filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
-    const n = rows.length, mAtt = avg(p => p.pct), mQ = avg(p => p.score), acima = rows.filter(p => p.pct >= 100).length, aten = rows.filter(p => p.pct < 100 || p.lowRatePct >= 10).length;
+    const n = rows.length, mAtt = avg(p => p.pct), mQ = avg(p => p.score), acima = rows.filter(p => p.pct >= 100).length, aten = rows.filter(p => p.pct < 80 || p.lowRatePct >= 15).length;
     const prodSeries = (teamGran === "month" ? trend?.monthly?.prod : trend?.weekly?.prod) || [];
     const qualSeries = (teamGran === "month" ? trend?.monthly?.qual : trend?.weekly?.qual) || [];
     const sortKey = (k) => setTeamSort(s => s.k === k ? { k, dir: -s.dir } : { k, dir: (k === "name" || k === "grp") ? 1 : -1 });
@@ -176,14 +176,14 @@ export default function PersonalIndicatorsPage() {
               ))}
             </tr></thead>
             <tbody>
-              {sorted.map(p => { const warn = p.pct < 100 || p.lowRatePct >= 10; return (
+              {sorted.map(p => { const warn = p.pct < 80 || p.lowRatePct >= 15; return (
                 <tr key={p.name} onClick={() => openPerson(p.name)} style={{ cursor: "pointer", background: warn ? T.red + "0c" : "transparent", borderBottom: `1px solid ${T.borderRow || T.border}` }}>
                   <td style={{ padding: "10px 14px", fontWeight: 700, color: T.t1, whiteSpace: "nowrap" }}>{p.name}</td>
                   <td style={{ padding: "10px 14px" }}><span style={{ fontSize: 11, fontWeight: 700, color: T.t7 || T.t8, background: T.bgDeep, border: `1px solid ${T.border}`, padding: "2px 8px", borderRadius: 6 }}>{grpShort(p.grp)}</span></td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.pct >= 100 ? T.green : p.pct >= 80 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{p.pct}%</b></td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: T.t2, fontVariantNumeric: "tabular-nums" }}>{p.rank ? `${p.rank}º/${p.groupSize}` : "—"}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.score >= 8 ? T.green : T.amber, fontVariantNumeric: "tabular-nums" }}>{p.score != null ? fmt(p.score, 2) : "—"}</b></td>
-                  <td style={{ padding: "10px 14px", textAlign: "right", color: p.lowRatePct >= 10 ? T.red : p.lowRatePct > 0 ? T.amber : T.t8, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(p.lowRatePct, 1)}% <span style={{ color: T.t9, fontWeight: 400 }}>({p.lowTotal})</span></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right", color: p.lowRatePct >= 15 ? T.red : p.lowRatePct > 0 ? T.amber : T.t8, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(p.lowRatePct, 1)}% <span style={{ color: T.t9, fontWeight: 400 }}>({p.lowTotal})</span></td>
                 </tr>
               ); })}
               {!sorted.length && <tr><td colSpan={6} style={{ padding: 30, textAlign: "center", color: T.t6 }}>Sem colaboradores no time.</td></tr>}
@@ -318,7 +318,7 @@ export default function PersonalIndicatorsPage() {
               <div style={h3}><span style={dot(T.amber)} />Qualidade (nota)</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{q ? fmt(q.score, 2) : "—"}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                {q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 9,0
+                {q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0
               </div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{q ? `${q.qty} avaliações · ${fmt(L.lowRatePct, 1)}% baixas <6 (${L.total})` : "sem avaliações"}</div>
               {q && <div style={{ marginTop: 9 }}>
@@ -350,6 +350,35 @@ export default function PersonalIndicatorsPage() {
             </div>
           </div>
 
+          {/* Notas baixas (<6) — card dedicado */}
+          {q && <div style={{ ...card, marginBottom: 14, borderLeft: `3px solid ${T.red}` }}>
+            <div style={h3}><span style={dot(T.red)} />Notas baixas (&lt; 6)</div>
+            <div style={{ display: "flex", gap: 26, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ paddingRight: 22, borderRight: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 40, fontWeight: 800, color: L.total > 0 ? T.red : T.green, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{L.total}</div>
+                <div style={{ fontSize: 11, color: T.t6, marginTop: 5 }}>notas baixas</div>
+              </div>
+              {[[`${fmt(L.lowRatePct, 1)}%`, "taxa de baixas", L.lowRatePct >= 15 ? T.red : L.lowRatePct > 0 ? T.amber : T.green],
+                [L.totalQty, "avaliações", null],
+                [`${L.weeksWithLow}/${L.totalWeeks}`, "semanas com baixa", null],
+                [L.streakNoLow, "semanas sem baixa", T.violet],
+                [L.lastLowWeeksAgo == null ? "nunca" : L.lastLowWeeksAgo === 0 ? "período atual" : `${L.lastLowWeeksAgo} sem`, "última baixa", null],
+                [L.totalUnfit, "unfit / reprovadas", L.totalUnfit > 0 ? T.amber : null]].map(([v, l, c], i) => (
+                <div key={i}><div style={{ fontSize: 20, fontWeight: 800, color: c || T.t1, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 10.5, color: T.t6, marginTop: 3 }}>{l}</div></div>
+              ))}
+            </div>
+            {qSource.length > 0 && <div style={{ display: "flex", gap: 6, alignItems: "flex-end", marginTop: 16 }}>
+              {qSource.map((w, i) => { const maxLow = Math.max(...qSource.map(x => x.low), 1); const hh = w.low > 0 ? Math.round(w.low / maxLow * 40) + 6 : 4; const top = (w.range || "").indexOf("–") >= 0 ? w.range.split("–")[0] : w.range;
+                return <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }} title={`${w.week ? w.week + " · " : ""}${w.range}: ${w.low} baixa(s) · nota ${w.score}`}>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, color: w.low > 0 ? T.red : T.t9, fontVariantNumeric: "tabular-nums" }}>{w.low}</div>
+                  <div style={{ width: "100%", maxWidth: 26, height: hh, borderRadius: "4px 4px 0 0", background: w.low > 0 ? T.red : T.t1 + "22" }} />
+                  <div style={{ fontSize: 9, color: T.t9, whiteSpace: "nowrap" }}>{top}</div>
+                </div>;
+              })}
+            </div>}
+            <div style={{ fontSize: 11, color: T.t9, marginTop: 12 }}>Cada coluna é {gran === "month" || isAcc ? "um mês" : "uma semana"}; vermelho = notas abaixo de 6. Meta: manter abaixo de 15%.</div>
+          </div>}
+
           {/* Charts */}
           <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div style={card}>
@@ -378,8 +407,9 @@ export default function PersonalIndicatorsPage() {
             <div style={card}>
               <div style={h3}><span style={dot(T.green)} />Seu caminho a seguir</div>
               {[
-                q && q.score < 9 ? ["🎯", T.amber, "Buscar nota 9,0 (excelência)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`] : null,
-                q && L.lowRatePct >= 10 ? ["⚠️", T.red, `Reduzir notas baixas: ${fmt(L.lowRatePct)}% → <10%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
+                q && q.score < 8 ? ["🎯", T.amber, "Atingir a meta de qualidade (8,0)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`]
+                  : q ? ["✅", T.green, "Meta de qualidade atingida (8,0)", `Você está em ${fmt(q.score, 2)} — acima da meta. Mantenha o padrão de revisão.`] : null,
+                q && L.lowRatePct >= 15 ? ["⚠️", T.red, `Reduzir notas baixas (<6): ${fmt(L.lowRatePct)}% → meta <15%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
                 a ? ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`] : null,
                 qualityOnly && q ? ["🛡️", T.violet, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,
               ].filter(Boolean).map(([ic, c, t, p], i, arr) => (

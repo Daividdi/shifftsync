@@ -30,9 +30,10 @@ export const Card = ({ children, style = {}, className = "" }) => {
   const { theme: T } = useTheme();
   return (
     <div className={className} style={{
-      background: T.bgCard, border: `1px solid ${T.border}`,
-      borderRadius: 12, padding: 20,
-      boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.08)",
+      background: `linear-gradient(180deg, ${T.bgCard}, ${T.bgDeep})`,
+      border: `1px solid ${T.border}`,
+      borderRadius: 16, padding: 20,
+      boxShadow: "0 1px 2px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.10)",
       transition: "background 0.25s, border-color 0.25s",
       ...style,
     }}>{children}</div>

@@ -59,20 +59,20 @@ export default function BirthdaysPage() {
   const selectedPeople = selectedDay ? (byDay[selectedDay] || []) : [];
 
   return (
-    <div style={{ padding: 28, overflowY: "auto" }}>
+    <div style={{ padding: "18px 24px", overflowY: "auto" }}>
       {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{
-            width: 44, height: 44, borderRadius: 14,
+            width: 38, height: 38, borderRadius: 12,
             background: "linear-gradient(135deg, #F472B6, #EC4899)",
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             boxShadow: "0 4px 16px #EC489930",
           }}>
-            <Cake size={22} color="#fff" />
+            <Cake size={19} color="#fff" />
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: T.t1, margin: 0 }}>Aniversários</h1>
+            <h1 style={{ fontSize: 19, fontWeight: 800, color: T.t1, margin: 0 }}>Aniversários</h1>
             <p style={{ color: T.t8, fontSize: 13, margin: 0 }}>
               {birthdays.length} colegas com data de nascimento cadastrada
             </p>
@@ -86,9 +86,9 @@ export default function BirthdaysPage() {
       {/* ── Banner hoje ── */}
       {todayBirthdays.length > 0 && !search && (
         <div style={{
-          marginBottom: 24, padding: "16px 22px",
+          marginBottom: 14, padding: "11px 18px",
           background: "linear-gradient(135deg, #EC4899 0%, #F472B6 50%, #FB7185 100%)",
-          borderRadius: 16, display: "flex", alignItems: "center", gap: 18,
+          borderRadius: 14, display: "flex", alignItems: "center", gap: 16,
           boxShadow: "0 4px 28px #EC489940",
         }}>
           <span style={{ fontSize: 36 }}>🎂</span>
@@ -131,7 +131,7 @@ export default function BirthdaysPage() {
           {/* ── Calendário (largura total) ── */}
           <Card style={{ padding: 0, overflow: "hidden" }}>
             {/* Nav do mês */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: `1px solid ${T.borderSubtle}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 18px", borderBottom: `1px solid ${T.borderSubtle}` }}>
               <button onClick={prevMonth} style={{ background: "none", border: "none", color: T.t6, cursor: "pointer", padding: 6, borderRadius: 8, display: "flex", transition: "background 0.1s" }}
                 onMouseEnter={e => e.currentTarget.style.background = T.bgDeep}
                 onMouseLeave={e => e.currentTarget.style.background = "none"}>
@@ -155,7 +155,7 @@ export default function BirthdaysPage() {
             {/* Cabeçalho dias */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderBottom: `1px solid ${T.borderSubtle}`, background: T.bgDeep }}>
               {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d => (
-                <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: T.t9, letterSpacing: "0.06em" }}>{d}</div>
+                <div key={d} style={{ padding: "6px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: T.t9, letterSpacing: "0.06em" }}>{d}</div>
               ))}
             </div>
 
@@ -169,7 +169,7 @@ export default function BirthdaysPage() {
                   <div key={idx}
                     onClick={() => day && hasBday && setSelectedDay(isSelected ? null : day)}
                     style={{
-                      minHeight: 118, padding: "10px 10px",
+                      minHeight: 76, padding: "5px 7px",
                       borderBottom: `1px solid ${T.borderRow}`,
                       borderRight: idx % 7 !== 6 ? `1px solid ${T.borderRow}` : "none",
                       background: isSelected ? "#EC489918" : isTod ? T.accent + "0D" : "transparent",
@@ -184,29 +184,29 @@ export default function BirthdaysPage() {
                     {day && (
                       <>
                         <div style={{
-                          width: 26, height: 26, borderRadius: "50%",
+                          width: 21, height: 21, borderRadius: "50%",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 13, fontWeight: isTod ? 800 : 400,
+                          fontSize: 12, fontWeight: isTod ? 800 : 400,
                           color: isTod ? "#fff" : T.t5,
                           background: isTod ? T.accent : "transparent",
-                          marginBottom: 5,
+                          marginBottom: 3,
                         }}>{day}</div>
                         {hasBday && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            {byDay[day].slice(0, 3).map(b => (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            {byDay[day].slice(0, 2).map(b => (
                               <div key={b.id} style={{
-                                display: "flex", alignItems: "center", gap: 5,
+                                display: "flex", alignItems: "center", gap: 4,
                                 background: b.isToday ? "#EC4899" : "#EC489922",
-                                borderRadius: 5, padding: "2px 7px",
+                                borderRadius: 5, padding: "1px 6px",
                               }}>
                                 <span style={{ fontSize: 9 }}>🎂</span>
-                                <span style={{ fontSize: 10.5, fontWeight: 600, color: b.isToday ? "#fff" : "#EC4899", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: b.isToday ? "#fff" : "#EC4899", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 120 }}>
                                   {b.fullName?.split(" ")[0]}
                                 </span>
                               </div>
                             ))}
-                            {byDay[day].length > 3 && (
-                              <div style={{ fontSize: 10, color: "#EC4899", paddingLeft: 4, fontWeight: 600 }}>+{byDay[day].length - 3}</div>
+                            {byDay[day].length > 2 && (
+                              <div style={{ fontSize: 9.5, color: "#EC4899", paddingLeft: 4, fontWeight: 600 }}>+{byDay[day].length - 2}</div>
                             )}
                           </div>
                         )}

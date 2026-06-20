@@ -50,17 +50,26 @@ function LineChart({ data, T }) {
   );
 }
 
-function RangeBar({ label, valueLabel, valueColor, fillPct, markerPct, scale, note, noteColor, fill, T }) {
+function RangeBar({ label, valueLabel, valueColor, fillPct, markerPct, scale, note, noteColor, fill, markerLabel = "média", T }) {
+  const fp = Math.max(0, Math.min(100, fillPct));
+  const mp = Math.max(0, Math.min(100, markerPct));
+  const met = fillPct >= markerPct;             // bateu/passou a referência?
+  const mc = met ? T.green : T.red;             // marcador colorido por status
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 8 }}>
         <span style={{ color: T.t2 }}>{label}</span><b style={{ color: valueColor }}>{valueLabel}</b>
       </div>
-      <div style={{ position: "relative", height: 10, borderRadius: 99, background: T.t1 + "12" }}>
-        <i style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${Math.max(0, Math.min(100, fillPct))}%`, borderRadius: 99, background: fill }} />
-        <span title="média do grupo" style={{ position: "absolute", left: `${Math.max(0, Math.min(100, markerPct))}%`, top: -4, height: 18, width: 2, background: T.t1, borderRadius: 2 }} />
+      <div style={{ position: "relative", height: 12, borderRadius: 99, background: T.t1 + "12", marginTop: 18 }}>
+        <i style={{ position: "absolute", left: 0, top: 0, height: "100%", width: `${fp}%`, borderRadius: 99, background: fill }} />
+        {/* marcador da referência (empresa/média) */}
+        <div style={{ position: "absolute", left: `${mp}%`, top: -17, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", pointerEvents: "none", zIndex: 2 }}>
+          <span style={{ fontSize: 9, fontWeight: 800, color: mc, lineHeight: 1, marginBottom: 2, whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: ".04em" }}>{markerLabel}</span>
+          <span style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `5px solid ${mc}` }} />
+        </div>
+        <span style={{ position: "absolute", left: `${mp}%`, top: -3, height: 18, width: 2.5, background: mc, transform: "translateX(-50%)", borderRadius: 2, boxShadow: `0 0 0 1.5px ${T.bgCard}` }} />
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.t6, marginTop: 6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: T.t6, marginTop: 8 }}>
         {scale.map((s, i) => <span key={i}>{s}</span>)}
       </div>
       <div style={{ fontSize: 11.5, color: noteColor, marginTop: 6, fontWeight: 600 }}>{note}</div>
@@ -208,8 +217,8 @@ export default function PersonalIndicatorsPage() {
       {(tP != null && cP != null) || (tQ != null && cQ != null) ? <div style={{ ...card, marginBottom: 14 }}>
         <div style={h3}><span style={dot(T.violet)} />Time vs empresa — {trend?.monthLabel}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
-          {tP != null && cP != null && <RangeBar T={T} label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
-          {tQ != null && cQ != null && <RangeBar T={T} label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 7) / 3 * 100} markerPct={(cQ - 7) / 3 * 100} scale={["7,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
+          {tP != null && cP != null && <RangeBar T={T} markerLabel="empresa" label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
+          {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 7) / 3 * 100} markerPct={(cQ - 7) / 3 * 100} scale={["7,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
         </div>
       </div> : null}
 

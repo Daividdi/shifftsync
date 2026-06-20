@@ -15,7 +15,18 @@ function TrendPill({ dir, label, T }) {
   </span>;
 }
 
+function ChartTip({ x, y, text, W, PX, T }) {
+  const tw = String(text).length * 5.6 + 16, tx = Math.max(PX - 4, Math.min(W - PX - tw + 4, x - tw / 2)), ty = Math.max(2, y);
+  return (
+    <g pointerEvents="none">
+      <rect x={tx} y={ty} width={tw} height={19} rx="5" fill={T.tooltipBg || "#0b1322"} stroke={T.border} />
+      <text x={tx + tw / 2} y={ty + 12.5} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={T.t1}>{text}</text>
+    </g>
+  );
+}
+
 function BarChart({ data, T }) {
+  const [hi, setHi] = useState(null);
   const W = 560, H = 190, PX = 30, PYT = 14, PYB = 24, max = 170, n = data.length || 1;
   const cw = (W - 2 * PX) / n, bw = Math.min(cw - 6, 24), ch = H - PYT - PYB;
   const ty = PYT + (1 - 100 / max) * ch;
@@ -26,26 +37,36 @@ function BarChart({ data, T }) {
       {data.map(([day, pct], i) => {
         const x = PX + i * cw + (cw - bw) / 2, h = Math.max((pct / max) * ch, 2), y = H - PYB - h;
         const col = pct >= 100 ? T.accent : T.t8;
-        return <g key={i}>
-          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3" fill={col} />
+        return <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: "pointer" }}>
+          <rect x={PX + i * cw} y={PYT} width={cw} height={ch} fill="transparent" />
+          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3" fill={col} opacity={hi != null && hi !== i ? 0.5 : 1} />
           <text x={(x + bw / 2).toFixed(1)} y={(y - 4).toFixed(1)} textAnchor="middle" fontSize="9" fill={T.t2}>{pct}</text>
           <text x={(x + bw / 2).toFixed(1)} y={H - 8} textAnchor="middle" fontSize="9" fill={T.t6}>{day}</text>
         </g>;
       })}
+      {hi != null && data[hi] && <ChartTip W={W} PX={PX} x={PX + hi * cw + cw / 2} y={PYT + 1} text={`${data[hi][0]} · ${data[hi][1]}% da meta`} T={T} />}
     </svg>
   );
 }
 
 function LineChart({ data, T }) {
-  const W = 560, H = 190, PX = 30, PYT = 16, PYB = 22, lo = 7, hi = 10, n = data.length;
-  const cw = n > 1 ? (W - 2 * PX) / (n - 1) : 0, ch = H - PYT - PYB, Y = v => PYT + (1 - (v - lo) / (hi - lo)) * ch;
+  const [hi, setHi] = useState(null);
+  const W = 560, H = 190, PX = 30, PYT = 16, PYB = 22, lo = 7, hiV = 10, n = data.length;
+  const cw = n > 1 ? (W - 2 * PX) / (n - 1) : 0, ch = H - PYT - PYB, Y = v => PYT + (1 - (v - lo) / (hiV - lo)) * ch;
   const path = data.map(([, s], i) => `${i ? "L" : "M"}${(PX + i * cw).toFixed(1)},${Y(s).toFixed(1)}`).join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
       {[7, 8, 9, 10].map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
       <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
       <path d={path} fill="none" stroke={T.amber} strokeWidth="2.5" strokeLinejoin="round" />
-      {data.map(([date, s], i) => <circle key={i} cx={(PX + i * cw).toFixed(1)} cy={Y(s).toFixed(1)} r="3.4" fill={T.bgCard} stroke={T.amber} strokeWidth="2" />)}
+      {hi != null && data[hi] && <line x1={PX + hi * cw} y1={PYT} x2={PX + hi * cw} y2={H - PYB} stroke={T.amber} strokeOpacity="0.35" strokeWidth="1" />}
+      {data.map(([date, s], i) => (
+        <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: "pointer" }}>
+          <rect x={(PX + i * cw - (cw || 14) / 2).toFixed(1)} y={PYT} width={cw || 14} height={ch} fill="transparent" />
+          <circle cx={(PX + i * cw).toFixed(1)} cy={Y(s).toFixed(1)} r={hi === i ? 5 : 3.4} fill={T.bgCard} stroke={T.amber} strokeWidth="2" />
+        </g>
+      ))}
+      {hi != null && data[hi] && <ChartTip W={W} PX={PX} x={PX + hi * cw} y={Math.max(2, Y(data[hi][1]) - 22)} text={`${data[hi][0]} · nota ${fmt(data[hi][1], 2)}`} T={T} />}
     </svg>
   );
 }

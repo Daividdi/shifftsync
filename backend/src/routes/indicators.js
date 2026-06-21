@@ -254,6 +254,19 @@ router.get("/person", requireAuth, (req, res) => {
 
 // GET /api/indicators/team — lightweight list of people the logged-in user may
 // open in the personal-indicators page (gestor: everyone; leader: their team).
+// Roster = produtividade ∪ revisores só-qualidade (têm quality_designer mas não
+// productivity, ex.: Basic QC). Sem o union, esses revisores somem das listas.
+function rosterDesigners(d, latestMonth) {
+  const prod = d.prepare(
+    "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0"
+  ).all(latestMonth + "-%");
+  const prodSet = new Set(prod.map(r => r.name));
+  const qonly = d.prepare(
+    "SELECT DISTINCT designer_name name, group_no grp, position lvl FROM quality_designer WHERE period_type='month' AND designer_name NOT IN (SELECT DISTINCT designer_name FROM productivity)"
+  ).all().filter(r => !prodSet.has(r.name));
+  return [...prod, ...qonly].sort((a, b) => (a.grp || "").localeCompare(b.grp || "") || (a.name || "").localeCompare(b.name || ""));
+}
+
 router.get("/team", requireAuth, (req, res) => {
   const ss = getDb();
   const me = ss.prepare("SELECT role FROM users WHERE id=?").get(req.user.id);
@@ -264,9 +277,7 @@ router.get("/team", requireAuth, (req, res) => {
   const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
   if (!latRow || !latRow.m) return res.json({ canManage: false, people: [] });
   const latest = latRow.m.slice(0, 7);
-  const desigs = d.prepare(
-    "SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE snapshot_date LIKE ? AND quota>0 ORDER BY group_no, designer_name"
-  ).all(latest + "-%");
+  const desigs = rosterDesigners(d, latest);
 
   if (new Set(["gerencia", "hr", "ti"]).has(me.role)) {
     return res.json({ canManage: true, scope: "gestor", people: desigs });
@@ -337,9 +348,15 @@ router.get("/overview", requireAuth, (req, res) => {
       ? PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4)
       : PTM[+rangeMonths[rangeMonths.length - 1].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4);
 
-    let desigs = d.prepare(
+    // Roster do range + revisores só-qualidade (Basic QC etc.)
+    const prodDesigs = d.prepare(
       `SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
     ).all(...rangeMonths);
+    const prodNamesSet = new Set(prodDesigs.map(r => r.name));
+    const qonlyDesigs = d.prepare(
+      `SELECT DISTINCT designer_name name, group_no grp, position lvl FROM quality_designer WHERE period_type='month' AND substr(snapshot_date,1,7) IN (${mph}) AND designer_name NOT IN (SELECT DISTINCT designer_name FROM productivity)`
+    ).all(...rangeMonths).filter(r => !prodNamesSet.has(r.name));
+    let desigs = [...prodDesigs, ...qonlyDesigs];
     if (memberNames) desigs = desigs.filter(x => memberNames.some(mn => nameMatch(mn, x.name)));
 
     const rankCache = {};

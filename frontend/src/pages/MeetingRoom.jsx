@@ -216,9 +216,10 @@ function BookingForm({ onSave, onCancel, T, user, initial }) {
                 </span>);})}
             </div>
           )}
+          <div style={{position:"relative"}}>
           <input value={partSearch} onChange={e=>setPartSearch(e.target.value)} placeholder="Buscar e selecionar pessoas..." style={inputStyle}/>
           {partSearch&&(
-            <div style={{maxHeight:170,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,marginTop:6,background:T.bgDeep}}>
+            <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:30,maxHeight:200,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,background:T.bgDeep,boxShadow:"0 10px 30px rgba(0,0,0,0.45)"}}>
               {filteredUsers.length?filteredUsers.map(u=>(
                 <div key={u.id} onClick={()=>toggleP(u.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 11px",cursor:"pointer",fontSize:12,color:T.t2,borderBottom:`1px solid ${T.border}`}}>
                   <input type="checkbox" readOnly checked={form.participants.includes(u.id)} style={{accentColor:T.accent}}/>
@@ -227,6 +228,7 @@ function BookingForm({ onSave, onCancel, T, user, initial }) {
               )):<div style={{padding:"8px 11px",fontSize:12,color:T.t9}}>Ninguém encontrado</div>}
             </div>
           )}
+          </div>
         </div>
 
         <div style={{gridColumn:"1/-1"}}>

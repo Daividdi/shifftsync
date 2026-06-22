@@ -129,8 +129,8 @@ function BookingForm({ onSave, onCancel, T, user, initial }) {
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const toggleP = (id) => setForm(f=>({ ...f, participants: f.participants.includes(id) ? f.participants.filter(x=>x!==id) : [...f.participants, id] }));
 
-  useEffect(() => { api.get("/users").then(r=>setUsers((r.data||[]).filter(u=>u.full_name && u.id!==user?.id))).catch(()=>{}); }, [user?.id]);
-  const filteredUsers = users.filter(u=>u.full_name.toLowerCase().includes(partSearch.toLowerCase())).slice(0,50);
+  useEffect(() => { api.get("/users").then(r=>setUsers((r.data||[]).filter(u=>u.fullName && u.id!==user?.id))).catch(()=>{}); }, [user?.id]);
+  const filteredUsers = users.filter(u=>u.fullName.toLowerCase().includes(partSearch.toLowerCase())).slice(0,50);
 
   useEffect(() => {
     if (!form.date||!form.startTime||!form.endTime) return;
@@ -211,7 +211,7 @@ function BookingForm({ onSave, onCancel, T, user, initial }) {
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
               {form.participants.map(id=>{const u=users.find(x=>x.id===id);return (
                 <span key={id} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,background:T.accent+"22",color:T.accent,borderRadius:20,padding:"3px 6px 3px 11px"}}>
-                  {u?.full_name||id}
+                  {u?.fullName||id}
                   <button onClick={()=>toggleP(id)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
                 </span>);})}
             </div>
@@ -222,7 +222,7 @@ function BookingForm({ onSave, onCancel, T, user, initial }) {
               {filteredUsers.length?filteredUsers.map(u=>(
                 <div key={u.id} onClick={()=>toggleP(u.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 11px",cursor:"pointer",fontSize:12,color:T.t2,borderBottom:`1px solid ${T.border}`}}>
                   <input type="checkbox" readOnly checked={form.participants.includes(u.id)} style={{accentColor:T.accent}}/>
-                  {u.full_name}
+                  {u.fullName}
                 </div>
               )):<div style={{padding:"8px 11px",fontSize:12,color:T.t9}}>Ninguém encontrado</div>}
             </div>

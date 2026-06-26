@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { BarChart3, Settings2 } from "lucide-react";
 
 const SCREENS = [
+  { id: "live",       label: "Produção ao vivo",     color: "#f59e0b" },
   { id: "prod-geral", label: "Produtividade Geral", color: "#06b6d4" },
   { id: "atd-prod",   label: "Produtividade ATD",   color: "#3b82f6" },
   { id: "atd-qual",   label: "Qualidade ATD",        color: "#8b5cf6" },

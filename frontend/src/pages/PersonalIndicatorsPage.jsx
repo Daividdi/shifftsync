@@ -216,7 +216,7 @@ export default function PersonalIndicatorsPage() {
           </div>
         </div>
         <div style={card}>
-          <div style={h3}><span style={dot(T.violet)} />Distribuição do atingimento</div>
+          <div style={h3}><span style={dot(T.purple)} />Distribuição do atingimento</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end", height: 110, marginTop: 6 }}>
             {buckets.map((b, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
@@ -236,7 +236,7 @@ export default function PersonalIndicatorsPage() {
       </div>
 
       {(tP != null && cP != null) || (tQ != null && cQ != null) ? <div style={{ ...card, marginBottom: 14 }}>
-        <div style={h3}><span style={dot(T.violet)} />Time vs empresa — {trend?.monthLabel}</div>
+        <div style={h3}><span style={dot(T.purple)} />Time vs empresa — {trend?.monthLabel}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
           {tP != null && cP != null && <RangeBar T={T} markerLabel="empresa" label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
           {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 7) / 3 * 100} markerPct={(cQ - 7) / 3 * 100} scale={["7,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
@@ -419,7 +419,7 @@ export default function PersonalIndicatorsPage() {
 
           {/* Comparativo */}
           <div style={{ ...card, marginBottom: 14 }}>
-            <div style={h3}><span style={dot(T.violet)} />Você vs o grupo {d.group} — média &amp; melhor</div>
+            <div style={h3}><span style={dot(T.purple)} />Você vs o grupo {d.group} — média &amp; melhor</div>
             <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,520px)" : "1fr 1fr", gap: 26 }}>
               {!qualityOnly && <RangeBar T={T} label="Atingimento (volume)" valueLabel={`você ${fmt(a.pct)}%`} valueColor={T.accent}
                 fillPct={a.pct / a.groupBest * 100} markerPct={a.groupAvg / a.groupBest * 100}
@@ -443,7 +443,7 @@ export default function PersonalIndicatorsPage() {
               {[[`${fmt(L.lowRatePct, 1)}%`, "taxa de baixas", L.lowRatePct >= 15 ? T.red : L.lowRatePct > 0 ? T.amber : T.green],
                 [L.totalQty, "avaliações", null],
                 [`${L.weeksWithLow}/${L.totalWeeks}`, "semanas com baixa", null],
-                [L.streakNoLow, "semanas sem baixa", T.violet],
+                [L.streakNoLow, "semanas sem baixa", T.purple],
                 [L.lastLowWeeksAgo == null ? "nunca" : L.lastLowWeeksAgo === 0 ? "período atual" : `${L.lastLowWeeksAgo} sem`, "última baixa", null],
                 [L.totalUnfit, "unfit / reprovadas", L.totalUnfit > 0 ? T.amber : null]].map(([v, l, c], i) => (
                 <div key={i}><div style={{ fontSize: 20, fontWeight: 800, color: c || T.t1, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 10.5, color: T.t6, marginTop: 3 }}>{l}</div></div>
@@ -476,8 +476,8 @@ export default function PersonalIndicatorsPage() {
           {/* Volume + caminho */}
           <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,560px)" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div style={card}>
-              <div style={h3}><span style={dot(T.violet)} />Volume por tipo — {monthName}</div>
-              {[["Casos novos", S.cases.new, T.accent], ["Modificações", S.cases.mod, T.violet], ["Refinamentos", S.cases.ref, T.green]].map(([lab, v, c]) => {
+              <div style={h3}><span style={dot(T.purple)} />Volume por tipo — {monthName}</div>
+              {[["Casos novos", S.cases.new, T.accent], ["Modificações", S.cases.mod, T.purple], ["Refinamentos", S.cases.ref, T.green]].map(([lab, v, c]) => {
                 const max = Math.max(S.cases.new, S.cases.mod, S.cases.ref, 1);
                 return <div key={lab} style={{ margin: "10px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}><span style={{ color: T.t2 }}>{lab}</span><b style={{ color: T.t1 }}>{v}</b></div>
@@ -493,7 +493,7 @@ export default function PersonalIndicatorsPage() {
                   : q ? ["✅", T.green, "Meta de qualidade atingida (8,0)", `Você está em ${fmt(q.score, 2)} — acima da meta. Mantenha o padrão de revisão.`] : null,
                 q && L.lowRatePct >= 15 ? ["⚠️", T.red, `Reduzir notas baixas (<6): ${fmt(L.lowRatePct)}% → meta <15%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
                 a ? ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`] : null,
-                qualityOnly && q ? ["🛡️", T.violet, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,
+                qualityOnly && q ? ["🛡️", T.purple, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,
               ].filter(Boolean).map(([ic, c, t, p], i, arr) => (
                 <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 0", borderBottom: i < arr.length - 1 ? `1px solid ${T.border}` : "none" }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, background: c + "22" }}>{ic}</div>
@@ -504,7 +504,7 @@ export default function PersonalIndicatorsPage() {
           </div>
 
           {/* Rahoot teaser */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, background: `linear-gradient(110deg, ${T.violet}1a, ${T.bgCard})`, border: `1px dashed ${T.violet}77`, borderRadius: 18, padding: "16px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, background: `linear-gradient(110deg, ${T.purple}1a, ${T.bgCard})`, border: `1px dashed ${T.purple}77`, borderRadius: 18, padding: "16px 18px" }}>
             <div style={{ fontSize: 24 }}>🏆</div>
             <div style={{ flex: 1 }}><b style={{ fontSize: 14, color: T.t1 }}>Ranking &amp; performance do Rahoot</b>
               <div style={{ fontSize: 11.5, color: T.t2, marginTop: 3 }}>Em breve: seus pontos, acertos e posição nos quizzes aparecerão aqui.</div></div>

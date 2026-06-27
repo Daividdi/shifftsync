@@ -135,7 +135,7 @@ function buildPersonBundle(d, inputName) {
   const idn = d.prepare("SELECT group_no, job_level FROM productivity WHERE designer_name=? ORDER BY snapshot_date DESC LIMIT 1").get(name);
   if (!idn) return qualityOnlyBundle(d, inputName);   // no productivity → try a quality-only panel (e.g. QC reviewers)
   const group = idn.group_no;
-  const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE designer_name=? AND quota>0 ORDER BY m").all(name).map(r => r.m);
+  const months = d.prepare("SELECT substr(snapshot_date,1,7) m FROM productivity WHERE designer_name=? AND quota>0 GROUP BY m HAVING SUM(completed) > 0 ORDER BY m").all(name).map(r => r.m);
   if (!months.length) return qualityOnlyBundle(d, inputName);
   const latest = months[months.length - 1];
 
@@ -146,8 +146,8 @@ function buildPersonBundle(d, inputName) {
 
   const aggLike = (like) => d.prepare("SELECT COUNT(*) days, SUM(completed) comp, AVG(progress)*100 pct, SUM(new_case_count) nc, SUM(mod_count) mod, SUM(refinement_count) ref FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0").get(name, like);
   const rankLike = (like) => d.prepare("WITH r AS (SELECT designer_name, AVG(progress)*100 ap FROM productivity WHERE group_no=? AND snapshot_date LIKE ? AND quota>0 GROUP BY designer_name) SELECT AVG(ap) avg, MAX(ap) best, COUNT(*) total, (SELECT COUNT(*) FROM r WHERE ap>(SELECT ap FROM r WHERE designer_name=?))+1 rank FROM r").get(group, like, name);
-  const dailyLike = (like) => d.prepare("SELECT substr(snapshot_date,9,2) day, ROUND(progress*100) pct FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date").all(name, like).map(r => [r.day, r.pct]);
-  const weeklyProdLike = (like) => d.prepare("SELECT MIN(snapshot_date) ws, MAX(snapshot_date) we, ROUND(AVG(progress)*100) pct, COUNT(*) days FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 GROUP BY strftime('%Y-%W',snapshot_date) ORDER BY ws").all(name, like).map(r => [dm(r.ws) + "–" + dm(r.we), r.pct, r.days]);
+  const dailyLike = (like) => d.prepare("SELECT substr(snapshot_date,9,2) day, ROUND(progress*100) pct, completed comp FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date").all(name, like).map(r => [r.day, r.pct, round(r.comp, 1)]);
+  const weeklyProdLike = (like) => d.prepare("SELECT MIN(snapshot_date) ws, MAX(snapshot_date) we, ROUND(AVG(progress)*100) pct, COUNT(*) days, ROUND(SUM(completed),1) comp FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 GROUP BY strftime('%Y-%W',snapshot_date) ORDER BY ws").all(name, like).map(r => [dm(r.ws) + "–" + dm(r.we), r.pct, r.days, r.comp]);
   const weeksLike = (like) => d.prepare("SELECT snapshot_date date, period_label label, ROUND(avg_score,2) score, COALESCE(score_qty,0) qty, COALESCE(qty_low_score,0) low, COALESCE(qty_unfit,0) unfit FROM quality_designer WHERE designer_name=? AND period_type='week' AND snapshot_date LIKE ? ORDER BY snapshot_date").all(name, like).map(r => { const m = (r.label || "").match(/\((\d{2})(\d{2})～(\d{2})(\d{2})\)/); const wk = (r.label || "").match(/w(\d+)/); return { date: r.date, week: wk ? ("S" + wk[1]) : "", range: m ? (m[2] + "/" + m[1] + "–" + m[4] + "/" + m[3]) : dm(r.date), score: r.score, qty: r.qty, low: r.low, unfit: r.unfit }; });
   const qMonthLike = (like) => d.prepare("SELECT avg_score score, score_qty qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ? ORDER BY snapshot_date DESC LIMIT 1").get(name, like);
   const qGroupLike = (like) => d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month' AND snapshot_date LIKE ?").get(group, like);
@@ -336,13 +336,14 @@ router.get("/overview", requireAuth, (req, res) => {
   try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
 
   try {
-    const allMonths = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m DESC").all().map(r => r.m);
+    const allMonths = d.prepare("SELECT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 GROUP BY m HAVING SUM(completed) > 0 ORDER BY m DESC").all().map(r => r.m);
     if (!allMonths.length) return res.json({ scope, scopeLabel, role: me.role, people: [] });
     const latest = allMonths[0];
     const pm = prevMonthStr(latest);
     // ?months=N — aggregate over the last N months (BI rule: SUM completed / SUM quota)
     const monthsN = Math.max(1, Math.min(12, parseInt(req.query.months) || 1));
     const rangeMonths = allMonths.slice(0, monthsN);
+    const prevRangeMonths = allMonths.slice(monthsN, monthsN * 2);
     const mph = rangeMonths.map(() => "?").join(",");
     const rangeLabel = monthsN === 1
       ? PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4)
@@ -374,9 +375,9 @@ router.get("/overview", requireAuth, (req, res) => {
         `SELECT SUM(completed) c, SUM(quota) q, SUM(new_case_count+mod_count+refinement_count) cases FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
       ).get(x.name, ...rangeMonths);
       const pct = a && a.q > 0 ? a.c / a.q * 100 : null;
-      const ap = monthsN === 1 ? d.prepare(
-        "SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0"
-      ).get(x.name, pm + "-%") : null;
+      const ap = prevRangeMonths.length ? d.prepare(
+        `SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${prevRangeMonths.map(() => "?").join(",")}) AND quota>0`
+      ).get(x.name, ...prevRangeMonths) : null;
       const apPct = ap && ap.q > 0 ? ap.c / ap.q * 100 : null;
       const q = d.prepare(
         `SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND substr(snapshot_date,1,7) IN (${mph})`
@@ -434,6 +435,9 @@ router.get("/team-trend", requireAuth, (req, res) => {
   try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
   try {
     const group = (req.query.group || "").trim() || null;
+    const monthsN = Math.max(1, Math.min(12, parseInt(req.query.months) || 1));
+    const wkLimit = Math.max(8, Math.min(26, monthsN * 4));
+    const trendN = Math.max(6, monthsN);
     let scopeNames = null;
     if (memberNames) {
       const allDesig = d.prepare("SELECT DISTINCT designer_name name FROM productivity").all().map(r => r.name);
@@ -449,18 +453,18 @@ router.get("/team-trend", requireAuth, (req, res) => {
     const latRow = d.prepare("SELECT MAX(snapshot_date) m FROM productivity WHERE quota>0").get();
     if (!latRow || !latRow.m) return res.json({ monthly: {}, weekly: {} });
     const latest = latRow.m.slice(0, 7);
-    const months = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 ORDER BY m").all().map(r => r.m).slice(-12);
+    const months = d.prepare("SELECT substr(snapshot_date,1,7) m FROM productivity WHERE quota>0 GROUP BY m HAVING SUM(completed) > 0 ORDER BY m").all().map(r => r.m).slice(-trendN);
 
-    const qMonths = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE period_type='month' ORDER BY m").all().map(r => r.m).slice(-12);
+    const qMonths = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE period_type='month' ORDER BY m").all().map(r => r.m).slice(-trendN);
     const monProd = months.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
     const monQual = qMonths.map(mo => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?${w.clause}`).get(mo + "-%", ...w.params); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
     const compProd = months.map(mo => { const r = d.prepare("SELECT AVG(progress)*100 p FROM productivity WHERE snapshot_date LIKE ? AND quota>0").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.p)]; });
     const compQual = qMonths.map(mo => { const r = d.prepare("SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='month' AND snapshot_date LIKE ?").get(mo + "-%"); return [PTM[+mo.slice(5, 7) - 1], round(r && r.s, 2)]; });
 
-    const wkDates = d.prepare("SELECT DISTINCT snapshot_date FROM quality_designer WHERE period_type='week' ORDER BY snapshot_date DESC LIMIT 12").all().map(r => r.snapshot_date).reverse();
+    const wkDates = d.prepare("SELECT DISTINCT snapshot_date FROM quality_designer WHERE period_type='week' ORDER BY snapshot_date DESC LIMIT " + wkLimit).all().map(r => r.snapshot_date).reverse();
     const wkQual = wkDates.map(dt => { const w = where(); const r = d.prepare(`SELECT AVG(avg_score) s FROM quality_designer WHERE period_type='week' AND snapshot_date=?${w.clause}`).get(dt, ...w.params); return [dt.slice(8, 10) + "/" + dt.slice(5, 7), round(r && r.s, 2)]; });
     const w2 = where();
-    const wkProd = d.prepare(`SELECT MIN(snapshot_date) ws, AVG(progress)*100 p FROM productivity WHERE quota>0${w2.clause} GROUP BY strftime('%Y-%W', snapshot_date) ORDER BY ws DESC LIMIT 8`).all(...w2.params).reverse().map(r => [r.ws.slice(8, 10) + "/" + r.ws.slice(5, 7), round(r.p)]);
+    const wkProd = d.prepare(`SELECT MIN(snapshot_date) ws, AVG(progress)*100 p FROM productivity WHERE quota>0${w2.clause} GROUP BY strftime('%Y-%W', snapshot_date) ORDER BY ws DESC LIMIT ${wkLimit}`).all(...w2.params).reverse().map(r => [r.ws.slice(8, 10) + "/" + r.ws.slice(5, 7), round(r.p)]);
 
     res.json({
       monthLabel: PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),

@@ -178,11 +178,11 @@ function NavGroup({ label, icon, children, defaultOpen = true, T }) {
 }
 
 // Item de menu individual
-function NavItem({ id, label, icon, active, setActive, T, badge, onClick }) {
+function NavItem({ id, label, labelText, icon, active, setActive, T, badge, onClick }) {
   const isActive = active === id;
   const [hovered, setHovered] = React.useState(false);
   return (
-    <button className="ss-navitem" onClick={() => (onClick ? onClick() : setActive(id))} title={label}
+    <button className="ss-navitem" onClick={() => (onClick ? onClick() : setActive(id))} title={typeof label === "string" ? label : (labelText || "")}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -352,7 +352,7 @@ export default function Sidebar({ active, setActive }) {
         <NavGroup label="Escalas" T={T} defaultOpen={true}>
           <NavItem id="calendar" label="Calendário"       icon={<Calendar size={15} />}        active={active} setActive={setActive} T={T} />
           <NavItem id="meeting"  label="Sala de Reunião"  icon={<DoorOpen size={15} />}         active={active} setActive={setActive} T={T} />
-          <NavItem id="holidays"
+          <NavItem id="holidays" labelText="Feriados"
             label={
               <span style={{display:"flex",alignItems:"center",gap:6}}>
                 Feriados
@@ -373,7 +373,7 @@ export default function Sidebar({ active, setActive }) {
 
         {/* Ausências — todos veem */}
         <NavGroup label="Ausências" T={T} defaultOpen={true}>
-          <NavItem id="absences"
+          <NavItem id="absences" labelText="Controle de Ausências"
             label={
               <span style={{display:"flex",alignItems:"center",gap:6}}>
                 Controle de Ausências

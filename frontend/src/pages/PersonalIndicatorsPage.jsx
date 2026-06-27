@@ -25,7 +25,7 @@ function ChartTip({ x, y, text, W, PX, T }) {
   );
 }
 
-function BarChart({ data, T }) {
+function BarChart({ data, T, onBar, sel }) {
   const [hi, setHi] = useState(null);
   const W = 560, H = 190, PX = 30, PYT = 14, PYB = 24, max = 170, n = data.length || 1;
   const cw = (W - 2 * PX) / n, bw = Math.min(cw - 6, 24), ch = H - PYT - PYB;
@@ -37,9 +37,9 @@ function BarChart({ data, T }) {
       {data.map(([day, pct], i) => {
         const x = PX + i * cw + (cw - bw) / 2, h = Math.max((pct / max) * ch, 2), y = H - PYB - h;
         const col = pct >= 100 ? T.accent : T.t8;
-        return <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: "pointer" }}>
+        return <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} onClick={() => onBar && onBar(i)} style={{ cursor: "pointer" }}>
           <rect x={PX + i * cw} y={PYT} width={cw} height={ch} fill="transparent" />
-          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3" fill={col} opacity={hi != null && hi !== i ? 0.5 : 1} />
+          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3" fill={col} stroke={sel === i ? T.t1 : "none"} strokeWidth={sel === i ? 1.6 : 0} opacity={hi != null && hi !== i ? 0.5 : 1} />
           <text x={(x + bw / 2).toFixed(1)} y={(y - 4).toFixed(1)} textAnchor="middle" fontSize="9" fill={T.t2}>{pct}</text>
           <text x={(x + bw / 2).toFixed(1)} y={H - 8} textAnchor="middle" fontSize="9" fill={T.t6}>{day}</text>
         </g>;
@@ -51,12 +51,15 @@ function BarChart({ data, T }) {
 
 function LineChart({ data, T }) {
   const [hi, setHi] = useState(null);
-  const W = 560, H = 190, PX = 30, PYT = 16, PYB = 22, lo = 7, hiV = 10, n = data.length;
-  const cw = n > 1 ? (W - 2 * PX) / (n - 1) : 0, ch = H - PYT - PYB, Y = v => PYT + (1 - (v - lo) / (hiV - lo)) * ch;
+  const W = 560, H = 190, PX = 30, PYT = 16, PYB = 22, hiV = 10, n = data.length;
+  const _vals = data.map(d => d[1]).filter(v => v != null);
+  const lo = Math.min(7, Math.floor(_vals.length ? Math.min(..._vals) : 7));
+  const _ticks = []; for (let v = hiV; v >= Math.ceil(lo); v--) _ticks.push(v);
+  const cw = n > 1 ? (W - 2 * PX) / (n - 1) : 0, ch = H - PYT - PYB, Y = v => PYT + (1 - (Math.max(lo, Math.min(hiV, v)) - lo) / (hiV - lo)) * ch;
   const path = data.map(([, s], i) => `${i ? "L" : "M"}${(PX + i * cw).toFixed(1)},${Y(s).toFixed(1)}`).join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
-      {[7, 8, 9, 10].map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
+      {_ticks.map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
       <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
       <path d={path} fill="none" stroke={T.amber} strokeWidth="2.5" strokeLinejoin="round" />
       {hi != null && data[hi] && <line x1={PX + hi * cw} y1={PYT} x2={PX + hi * cw} y2={H - PYB} stroke={T.amber} strokeOpacity="0.35" strokeWidth="1" />}
@@ -102,10 +105,11 @@ export default function PersonalIndicatorsPage() {
   const { theme: T } = useTheme();
   const [team, setTeam] = useState(null);          // { canManage, people:[{name,grp,lvl}] }
   const [viewName, setViewName] = useState(null);  // null => meus indicadores
-  const [gran, setGran] = useState("day");         // day | week | month | acc
+  const [gran, setGran] = useState("month");         // day | week | month | acc
   const [selMonth, setSelMonth] = useState(null);  // YYYY-MM (null => latest)
   const [state, setState] = useState({ loading: true });
   const [mode, setMode] = useState("individual");  // individual | team
+  const [selPt, setSelPt] = useState(null);        // dia/semana selecionado (índice)
   const [ov, setOv] = useState(null);              // overview (roster + métricas)
   const [trend, setTrend] = useState(null);        // team-trend (evolução)
   const [teamGroup, setTeamGroup] = useState("ALL");
@@ -125,9 +129,9 @@ export default function PersonalIndicatorsPage() {
 
   useEffect(() => {
     if (mode !== "team") return;
-    const q = teamGroup && teamGroup !== "ALL" ? `?group=${encodeURIComponent(teamGroup)}` : "";
-    api.get(`/indicators/team-trend${q}`).then(r => setTrend(r.data)).catch(() => setTrend(null));
-  }, [mode, teamGroup]);
+    const g = teamGroup && teamGroup !== "ALL" ? `&group=${encodeURIComponent(teamGroup)}` : "";
+    api.get(`/indicators/team-trend?months=${teamMonths}${g}`).then(r => setTrend(r.data)).catch(() => setTrend(null));
+  }, [mode, teamGroup, teamMonths]);
 
   const openPerson = (name) => { setViewName(name); setMode("individual"); };
 
@@ -203,7 +207,7 @@ export default function PersonalIndicatorsPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}>
-          <div style={h3}><span style={dot(T.green)} />Destaques vs mês anterior</div>
+          <div style={h3}><span style={dot(T.green)} />Destaques vs período anterior</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div>
               <div style={{ fontSize: 11, color: T.green, fontWeight: 700, marginBottom: 7 }}>▲ Maiores avanços</div>
@@ -239,7 +243,7 @@ export default function PersonalIndicatorsPage() {
         <div style={h3}><span style={dot(T.purple)} />Time vs empresa — {trend?.monthLabel}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
           {tP != null && cP != null && <RangeBar T={T} markerLabel="empresa" label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
-          {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 7) / 3 * 100} markerPct={(cQ - 7) / 3 * 100} scale={["7,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
+          {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 6) / 4 * 100} markerPct={(cQ - 6) / 4 * 100} scale={["6,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
         </div>
       </div> : null}
 
@@ -337,6 +341,15 @@ export default function PersonalIndicatorsPage() {
         const month = (selMonth && d.byMonth[selMonth]) ? selMonth : d.latest;
         const S = isL3 ? (d.last3 || d.monthly) : isAcc ? d.monthly : d.byMonth[month];
         const a = S.attainment, q = S.quality, L = S.lowScore;
+        const granSeries = gran === "day" ? (S.dailyProd || []) : gran === "week" ? (S.weeklyProd || []) : null;
+        let granDef = (granSeries && granSeries.length) ? granSeries.length - 1 : 0;
+        if (granSeries) for (let _i = granSeries.length - 1; _i >= 0; _i--) { if (granSeries[_i][1] > 0) { granDef = _i; break; } }
+        const granIdx = (granSeries && granSeries.length && a) ? (selPt != null && selPt < granSeries.length ? selPt : granDef) : null;
+        const granPt = granIdx != null ? granSeries[granIdx] : null;
+        const headPct = granPt ? granPt[1] : (a ? a.pct : null);
+        const granCases = granPt ? (gran === "day" ? granPt[2] : granPt[3]) : null;
+        const granDays = granPt ? (gran === "day" ? 1 : granPt[2]) : null;
+        const granQ = (gran === "week" && granPt && S.weeklyLow) ? (S.weeklyLow.find(w => w.range === granPt[0]) || null) : null;
         const qualityOnly = !a;   // QC reviewers (sem meta de produtividade)
         const aggView = isAcc || isL3;
         const monthName = isAcc ? "acumulado" : isL3 ? "últimos 3 meses" : (S.periodLabel || "").split("/")[0];
@@ -362,14 +375,14 @@ export default function PersonalIndicatorsPage() {
             <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Período</span>
               {(qualityOnly ? [["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]] : [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]]).map(([k, lab]) => (
-                <button key={k} onClick={() => setGran(k)} style={pill(gran === k || (qualityOnly && gran === "day" && k === "week"))}>{lab}</button>
+                <button key={k} onClick={() => { setGran(k); setSelPt(null); }} style={pill(gran === k || (qualityOnly && gran === "day" && k === "week"))}>{lab}</button>
               ))}
             </div>
             {!aggView && d.monthsMeta?.length > 1 && (
               <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Mês</span>
                 {d.monthsMeta.map(mm => (
-                  <button key={mm.key} onClick={() => setSelMonth(mm.key)} style={pill(month === mm.key)} title={mm.full}>{mm.label}</button>
+                  <button key={mm.key} onClick={() => { setSelMonth(mm.key); setSelPt(null); }} style={pill(month === mm.key)} title={mm.full}>{mm.label}</button>
                 ))}
               </div>
             )}
@@ -390,20 +403,20 @@ export default function PersonalIndicatorsPage() {
           <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.accent)} />Atingimento (volume)</div>
-              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.accent }}>{fmt(a.pct)}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
+              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.accent }}>{fmt(headPct)}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                {a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · meta 100%
+                {granPt ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · {gran === "day" ? "dia" : "semana"}</span> : <>{a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · meta 100%</>}
               </div>
-              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{fmt(a.completed, 1)} casos · {a.days} dias</div>
+              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{granPt ? <>{fmt(granCases, 1)} casos · {granDays} {gran === "day" ? "dia" : "dias"}</> : <>{fmt(a.completed, 1)} casos · {a.days} dias</>}</div>
             </div>}
             <div style={card}>
               <div style={h3}><span style={dot(T.amber)} />Qualidade (nota)</div>
-              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{q ? fmt(q.score, 2) : "—"}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
+              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{granQ ? fmt(granQ.score, 2) : (q ? fmt(q.score, 2) : "—")}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                {q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0
+                {granQ ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · semana</span> : <>{q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0{granPt ? " · mês" : ""}</>}
               </div>
-              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{q ? `${q.qty} avaliações · ${fmt(L.lowRatePct, 1)}% baixas <6 (${L.total})` : "sem avaliações"}</div>
-              {q && <div style={{ marginTop: 9 }}>
+              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{granQ ? `${granQ.qty} avaliações · ${(granQ.qty ? (granQ.low / granQ.qty * 100).toFixed(1) : "0")}% baixas <6 (${granQ.low})` : (q ? `${q.qty} avaliações · ${fmt(L.lowRatePct, 1)}% baixas <6 (${L.total})` : "sem avaliações")}{granPt && !granQ ? " (mês)" : ""}</div>
+              {q && !granQ && <div style={{ marginTop: 9 }}>
                 {L.streakNoLow > 0
                   ? <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: T.green + "22", color: T.green }}>🔥 {L.streakNoLow} {L.streakNoLow === 1 ? "semana" : "semanas"} sem nota baixa</span>
                   : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: T.t1 + "12", color: T.t3 }}>última nota baixa: {L.lastLowWeeksAgo === 0 ? "período atual" : L.lastLowWeeksAgo == null ? "nunca" : `${L.lastLowWeeksAgo} sem atrás`}</span>}
@@ -412,7 +425,7 @@ export default function PersonalIndicatorsPage() {
             {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.green)} />Posição no grupo</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.green }}>{a.rank}º</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/{a.groupSize}</span></div>
-              <div style={{ marginTop: 9, fontSize: 12, color: T.t2 }}>em produtividade · {d.group}</div>
+              <div style={{ marginTop: 9, fontSize: 12, color: T.t2 }}>em produtividade · {d.group}{granPt ? " · mês" : ""}</div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{a.rank <= Math.ceil(a.groupSize * 0.2) ? "top 20% 🔥 mantenha o ritmo" : "subindo no ranking"}</div>
             </div>}
           </div>
@@ -426,8 +439,8 @@ export default function PersonalIndicatorsPage() {
                 scale={["0", `média ${fmt(a.groupAvg)}%`, `melhor ${fmt(a.groupBest)}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`}
                 note={aboveAvg ? `▲ +${fmt(a.pct - a.groupAvg)} p.p. acima da média` : `▼ ${fmt(a.groupAvg - a.pct)} p.p. abaixo da média`} noteColor={aboveAvg ? T.green : T.red} />}
               {q && <RangeBar T={T} label="Qualidade (nota)" valueLabel={`você ${fmt(q.score, 2)}`} valueColor={T.amber}
-                fillPct={(q.score - 7) / 3 * 100} markerPct={(q.groupAvg - 7) / 3 * 100}
-                scale={["7,0", `média ${fmt(q.groupAvg, 2)}`, `melhor ${fmt(q.groupBest, 2)}`]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`}
+                fillPct={(q.score - 6) / 4 * 100} markerPct={(q.groupAvg - 6) / 4 * 100}
+                scale={["6,0", `média ${fmt(q.groupAvg, 2)}`, `melhor ${fmt(q.groupBest, 2)}`]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`}
                 note={q.score >= q.groupAvg ? `▲ ${fmt(q.score - q.groupAvg, 2)} acima da média` : `▼ ${fmt(q.groupAvg - q.score, 2)} abaixo da média — sua oportunidade`} noteColor={q.score >= q.groupAvg ? T.green : T.red} />}
             </div>
           </div>
@@ -465,7 +478,7 @@ export default function PersonalIndicatorsPage() {
           <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div style={card}>
               <div style={h3}><span style={dot(T.accent)} />{prodTitle}</div>
-              {prodData.length ? <BarChart data={prodData} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados no período</div>}
+              {prodData.length ? <BarChart data={prodData} T={T} onBar={(gran === "day" || gran === "week") ? (i) => setSelPt(i) : undefined} sel={(gran === "day" || gran === "week") ? granIdx : null} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados no período</div>}
             </div>}
             <div style={card}>
               <div style={h3}><span style={dot(T.amber)} />{qTitle}</div>

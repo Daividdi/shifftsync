@@ -173,7 +173,9 @@ function buildPersonBundle(d, inputName) {
   const byMonth = {}, monthsMeta = [];
   recent.forEach(mo => { byMonth[mo] = monthBundle(mo); monthsMeta.push({ key: mo, label: byMonth[mo].monthShort, full: byMonth[mo].periodLabel, isLatest: mo === latest }); });
 
-  const curAll = aggLike("%"), compAll = rankLike("%");
+  const _mIn = months.map(() => "?").join(",");
+  const curAll = d.prepare(`SELECT COUNT(*) days, SUM(completed) comp, AVG(progress)*100 pct, SUM(new_case_count) nc, SUM(mod_count) mod, SUM(refinement_count) ref FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${_mIn}) AND quota>0`).get(name, ...months);
+  const compAll = d.prepare(`WITH r AS (SELECT designer_name, AVG(progress)*100 ap FROM productivity WHERE group_no=? AND substr(snapshot_date,1,7) IN (${_mIn}) AND quota>0 GROUP BY designer_name) SELECT AVG(ap) avg, MAX(ap) best, COUNT(*) total, (SELECT COUNT(*) FROM r WHERE ap>(SELECT ap FROM r WHERE designer_name=?))+1 rank FROM r`).get(group, ...months, name);
   const monthsSeries = months.map(mo => [PTM[+mo.slice(5, 7) - 1], round(aggLike(mo + "-%").pct)]);
   // Quality has its own (usually longer) history — don't cap it to productivity months
   const qMonthsAll = d.prepare("SELECT DISTINCT substr(snapshot_date,1,7) m FROM quality_designer WHERE designer_name=? AND period_type='month' ORDER BY m").all(name).map(r => r.m);

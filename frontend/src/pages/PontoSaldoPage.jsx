@@ -20,6 +20,14 @@ function fmtHours(min) {
   const m = Math.abs(min) % 60;
   return h + "h" + (m > 0 ? String(m).padStart(2, "0") : "");
 }
+function fmtAbs(min) {
+  if (!min && min !== 0) return "—";
+  const abs = Math.abs(Math.round(min));
+  if (abs === 0) return "—";
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return h > 0 ? `${h}h${m > 0 ? String(m).padStart(2,"0") : ""}` : `${m}min`;
+}
 function fmtDate(d) {
   if (!d) return "—";
   const [y, mo, day] = d.split("-");
@@ -34,6 +42,83 @@ function balanceColor(min) {
   if (min < -30) return "#ef4444";
   return "#f59e0b";
 }
+
+// Mirror of backend computeDayDev — no tolerance, every minute counts (matches PDF).
+// recordedAt strings are timezone-free local time; toMin applies UTC-3 offset for browser env.
+// schedStart: scheduled start in minutes (default 480 = 08:00).
+const PAID_OT_DAILY_CAP = 120;
+const TOL_ENTRY_EXIT = 5;
+
+function computeDayDevFromBatidas(batidas, expected, isSat, schedStart) {
+  if (!batidas?.length) return { balance: 0, worked: 0, lunchMin: null, atrasoMin: 0, saMin: 0, extraMin: 0, paidOTMin: 0 };
+  const SS = schedStart !== undefined ? schedStart : 480;
+  const toMin = iso => { const d = new Date(iso); return ((d.getUTCHours()-3+24)%24)*60+d.getUTCMinutes(); };
+  const sorted = [...batidas].sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
+  const N = sorted.length;
+  let worked = 0, totalBreaks = 0;
+  for (let i = 0; i+1<N; i+=2) {
+    const from=toMin(sorted[i].recordedAt), to=toMin(sorted[i+1].recordedAt);
+    const dur=to>=from?to-from:to+1440-from; if(dur>0) worked+=dur;
+  }
+  for (let i = 1; i+1<N; i+=2) {
+    const from=toMin(sorted[i].recordedAt), to=toMin(sorted[i+1].recordedAt);
+    const dur=to>=from?to-from:to+1440-from; if(dur>0) totalBreaks+=dur;
+  }
+  if (N===0||N%2===1) return {balance:0, worked, lunchMin:null, atrasoMin:0, saMin:0, extraMin:0, paidOTMin:0};
+
+  if (isSat) {
+    const SAT_START = 480;
+    const SAT_END = SAT_START + expected;
+    const P1=toMin(sorted[0].recordedAt), Plast=toMin(sorted[N-1].recordedAt);
+    let atrasoMin=0, saMin=0, extraMin=0;
+    const entryDev = P1 - SAT_START;
+    if (Math.abs(entryDev) > TOL_ENTRY_EXIT) {
+      if (entryDev > 0) atrasoMin += entryDev; else extraMin += -entryDev;
+    }
+    const exitDev = Plast - SAT_END;
+    if (exitDev > 0) extraMin += exitDev; else if (exitDev < 0) saMin += -exitDev;
+    const paidOT = Math.max(0, extraMin - PAID_OT_DAILY_CAP);
+    const balance = (extraMin - paidOT) - atrasoMin - saMin;
+    return {balance, worked, lunchMin:null, atrasoMin, saMin, extraMin, paidOTMin:paidOT};
+  }
+  const isHalfPeriod = N === 2 && expected < 480;
+  if (isHalfPeriod) {
+    const raw=worked-expected;
+    const ex=raw>0?raw:0;
+    const at=raw<0?-raw:0;
+    const paidOT=Math.max(0,ex-PAID_OT_DAILY_CAP);
+    return {balance:(ex-paidOT)-at, worked, lunchMin:null, atrasoMin:at, saMin:0, extraMin:ex, paidOTMin:paidOT};
+  }
+  const fullWeekday = expected >= 360;
+  if (!fullWeekday) {
+    const raw=worked-expected;
+    const ex=raw>0?raw:0;
+    const paidOT=Math.max(0,ex-PAID_OT_DAILY_CAP);
+    return {balance:(ex-paidOT)-(raw<0?-raw:0), worked, lunchMin:null, atrasoMin:raw<0?-raw:0, saMin:0, extraMin:ex, paidOTMin:paidOT};
+  }
+  const hasLunch = expected >= 480 || N >= 4;
+  const SCHED_END = SS + expected + (hasLunch ? 60 : 0);
+  const P1=toMin(sorted[0].recordedAt), Plast=toMin(sorted[N-1].recordedAt);
+  let atrasoMin=0, saMin=0, extraMin=0;
+  const entryDev=P1-SS;
+  if (Math.abs(entryDev) > TOL_ENTRY_EXIT) {
+    if (entryDev>0) atrasoMin+=entryDev; else extraMin+=-entryDev;
+  }
+  let lunchMin=null;
+  if(N>=4){
+    lunchMin=totalBreaks;
+    const bd=totalBreaks-60;
+    if(bd>0) atrasoMin+=bd; else if(bd<0) extraMin+=-bd;
+  }
+  const exitDev=Plast-SCHED_END;
+  if (Math.abs(exitDev) > TOL_ENTRY_EXIT) {
+    if (exitDev>0) extraMin+=exitDev; else saMin+=-exitDev;
+  }
+  const paidOTMin=Math.max(0,extraMin-PAID_OT_DAILY_CAP);
+  const balance = (extraMin-paidOTMin) - atrasoMin - saMin;
+  return {balance, worked, lunchMin, atrasoMin, saMin, extraMin, paidOTMin};
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function BalanceBar({ min, maxAbs, T }) {
   if (!maxAbs) return null;
@@ -139,19 +224,20 @@ function PersonRow({ u, showGroup, maxAbs, T, expanded, onToggle, canEdit, onTog
           {/* Column headers */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "88px 68px 68px 76px 72px 76px",
+            gridTemplateColumns: "88px 62px 72px 62px 68px 66px 58px 58px 68px",
             padding: "8px 18px 4px", gap: 4,
           }}>
-            {["DATA", "ENTRADA", "SAÍDA", "TRABALHADO", "ESPERADO", "SALDO"].map(h => (
+            {["DATA", "ENTRADA", "ALMOÇO", "SAÍDA", "TRAB", "EXEC", "AUT", "ATRASO", "SALDO"].map(h => (
               <div key={h} style={{ fontSize: 9, color: T.t8, fontWeight: 700, letterSpacing: "0.07em" }}>{h}</div>
             ))}
           </div>
           {sortedDays.map(d => {
             const dc = balanceColor(d.balanceMin);
+            const atraso = d.atrasoMin ?? 0;
             return (
               <div key={d.date} style={{
                 display: "grid",
-                gridTemplateColumns: "88px 68px 68px 76px 72px 76px",
+                gridTemplateColumns: "88px 62px 72px 62px 68px 66px 58px 58px 68px",
                 padding: "5px 18px", gap: 4, alignItems: "center",
                 background: d.isIncomplete ? "#f59e0b06" : "transparent",
               }}>
@@ -162,11 +248,16 @@ function PersonRow({ u, showGroup, maxAbs, T, expanded, onToggle, canEdit, onTog
                 <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, color: "#22c55e", fontVariantNumeric: "tabular-nums" }}>
                   <LogIn size={9} color="#22c55e" />{fmtTime(d.entrada)}
                 </div>
+                <div style={{ fontSize: 12, color: T.t6, fontVariantNumeric: "tabular-nums" }}>
+                  {d.lunchMin != null ? fmtHours(d.lunchMin) : "—"}
+                </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 12, color: "#ef4444", fontVariantNumeric: "tabular-nums" }}>
                   <LogOut size={9} color="#ef4444" />{fmtTime(d.saida)}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{fmtHours(d.workedMin)}</div>
-                <div style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{fmtHours(d.expectedMin)}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(d.workedMin)}</div>
+                <div style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(d.expectedMin)}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: d.balanceMin !== 0 ? dc : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(d.balanceMin)}</div>
+                <div style={{ fontSize: 12, color: atraso > 0 ? "#ef4444" : T.t8, fontVariantNumeric: "tabular-nums" }}>{fmtAbs(atraso)}</div>
                 <div style={{ fontSize: 12, fontWeight: 800, color: dc, fontVariantNumeric: "tabular-nums" }}>{fmtBalance(d.balanceMin)}</div>
               </div>
             );
@@ -174,31 +265,36 @@ function PersonRow({ u, showGroup, maxAbs, T, expanded, onToggle, canEdit, onTog
           {/* Totals footer */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "88px 68px 68px 76px 72px 76px",
+            gridTemplateColumns: "88px 62px 72px 62px 68px 66px 58px 58px 68px",
             padding: "6px 18px 10px", gap: 4,
             borderTop: `1px solid ${T.border}`, marginTop: 2,
           }}>
-            <div style={{ fontSize: 10, color: T.t7, fontWeight: 700, letterSpacing: "0.06em", gridColumn: "1/4" }}>TOTAL</div>
+            <div style={{ fontSize: 10, color: T.t7, fontWeight: 700, letterSpacing: "0.06em", gridColumn: "1/5" }}>TOTAL</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.t2, fontVariantNumeric: "tabular-nums" }}>{fmtHours(u.workedMin)}</div>
             <div style={{ fontSize: 12, color: T.t7, fontVariantNumeric: "tabular-nums" }}>{fmtHours(u.expectedMin)}</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: balanceColor(u.workedMin - u.expectedMin), fontVariantNumeric: "tabular-nums" }}>{fmtBalance(u.workedMin - u.expectedMin)}</div>
+            <div style={{ gridColumn: "7/10", fontSize: 13, fontWeight: 800, color: balanceColor(u.correctedBalanceMin), fontVariantNumeric: "tabular-nums" }}>{fmtBalance(u.correctedBalanceMin)}</div>
           </div>
-          {/* Period Summary */}
+          {/* Period Summary — PDF-style per-event buckets */}
           <div style={{ borderTop: `1px solid ${T.border}`, padding: "12px 18px 14px", background: T.bgCard }}>
-            <div style={{ fontSize: 9, color: T.t8, fontWeight: 700, letterSpacing: "0.07em", marginBottom: 10 }}>RESUMO DO PERÍODO</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 9, color: T.t8, fontWeight: 700, letterSpacing: "0.07em", marginBottom: 10 }}>TOTAIS GERADOS NO PERÍODO</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginBottom: 10 }}>
               {[
-                { label: "EXTRAS DO PERÍODO",  value: fmtHours(u.totalExtrasMin),      color: "#22c55e" },
-                { label: "FALTAS DO PERÍODO",  value: fmtHours(u.totalFaltasMin),      color: "#ef4444" },
-                { label: "HORA EXTRA 50%",     value: fmtHours(u.totalPaidOTMin),      color: "#f59e0b" },
-                { label: "EXTRAS A COMPENSAR", value: fmtHours(u.extrasACompensarMin), color: "#22c55e" },
-                { label: "FALTAS A COMPENSAR", value: fmtHours(u.faltasACompensarMin), color: "#ef4444" },
+                { label: "EXTRAS",  value: fmtAbs(u.totalExtrasMin), color: "#22c55e" },
+                { label: "HORA EXTRA 50%", value: fmtAbs(u.totalPaidOTMin), color: "#f59e0b" },
+                { label: "EXTRAS A COMPENSAR", value: fmtAbs((u.totalExtrasMin || 0) - (u.totalPaidOTMin || 0)), color: "#22c55e" },
+                { label: "ATRASO (A)", value: fmtAbs(u.totalAtrasoMin), color: "#ef4444" },
+                { label: "SAÍDA ANT. (SA)", value: fmtAbs(u.totalSAMin), color: "#ef4444" },
+                { label: "FALTA (F)", value: fmtAbs(u.totalFaltaMin), color: "#ef4444" },
+                { label: "ABONO", value: fmtAbs(u.totalAbonoMin || 0), color: "#A78BFA" },
               ].map(({ label, value, color }) => (
-                <div key={label} style={{ textAlign: "center", padding: "7px 4px", background: T.bgDeep, borderRadius: 7 }}>
-                  <div style={{ fontSize: 8, color: T.t8, fontWeight: 700, letterSpacing: "0.05em", marginBottom: 3 }}>{label}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+                <div key={label} style={{ textAlign: "center", padding: "7px 3px", background: T.bgDeep, borderRadius: 7 }}>
+                  <div style={{ fontSize: 8, color: T.t8, fontWeight: 700, letterSpacing: "0.04em", marginBottom: 3 }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
                 </div>
               ))}
+            </div>
+            <div style={{ fontSize: 9, color: T.t8, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 6, marginTop: 4 }}>
+              SALDO = EXTRAS A COMPENSAR − ATRASO − SA − FALTA
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
               {[
@@ -224,13 +320,14 @@ export default function PontoSaldoPage() {
 
   const { user } = useAuth();
   const isAdmin = ["hr","ti","gerencia"].includes(user?.role);
-  const todayStr     = new Date().toISOString().slice(0, 10);
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const todayStr      = new Date().toISOString().slice(0, 10);
+  const yesterdayStr  = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const startOfMonth  = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
   const lastMonthStart = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toISOString().slice(0, 10);
   const lastMonthEnd   = new Date(new Date().getFullYear(), new Date().getMonth(), 0).toISOString().slice(0, 10);
 
   const [dateFrom,       setDateFrom]       = useState(startOfMonth);
-  const [dateTo,         setDateTo]         = useState(todayStr);
+  const [dateTo,         setDateTo]         = useState(yesterdayStr);
   const [preset,         setPreset]         = useState("month");
   const [days,           setDays]           = useState([]);
   const [loading,        setLoading]        = useState(false);
@@ -245,10 +342,10 @@ export default function PontoSaldoPage() {
   const [bancoEquipe,    setBancoEquipe]    = useState([]);
 
   const PRESETS = [
-    { id: "week",      label: "Esta semana",  f: () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return [d.toISOString().slice(0,10), todayStr]; } },
-    { id: "last7",     label: "7 dias",       f: () => [new Date(Date.now()-7*86400000).toISOString().slice(0,10), new Date(Date.now()-86400000).toISOString().slice(0,10)] },
-    { id: "month",     label: "Este mês",     f: () => [startOfMonth, todayStr] },
-    { id: "last30",    label: "30 dias",      f: () => [new Date(Date.now()-29*86400000).toISOString().slice(0,10), todayStr] },
+    { id: "week",      label: "Esta semana",  f: () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return [d.toISOString().slice(0,10), yesterdayStr]; } },
+    { id: "last7",     label: "7 dias",       f: () => [new Date(Date.now()-7*86400000).toISOString().slice(0,10), yesterdayStr] },
+    { id: "month",     label: "Este mês",     f: () => [startOfMonth, yesterdayStr] },
+    { id: "last30",    label: "30 dias",      f: () => [new Date(Date.now()-29*86400000).toISOString().slice(0,10), yesterdayStr] },
     { id: "lastmonth", label: "Mês passado",  f: () => [lastMonthStart, lastMonthEnd] },
   ];
 
@@ -295,71 +392,116 @@ export default function PontoSaldoPage() {
 
   const userStats = useMemo(() => {
     const byUser = new Map();
+    function seedUser(userId, fullName, groupName, groupColor, meioPeriodo, title, eq) {
+      byUser.set(userId, {
+        userId, fullName,
+        groupName: groupName || "Sem grupo",
+        groupColor: groupColor || "#94a3b8",
+        meioPeriodo: meioPeriodo ?? false,
+        title: title || '',
+        workedMin: 0, expectedMin: 0, correctedBalanceMin: 0, daysCount: 0, incompleteDays: 0, daysList: [],
+        bancoBalanceMin: eq?.periodBalanceMin ?? null,
+        previousBalanceMin: eq?.previousBalanceMin ?? null,
+        periodoLabel: eq?.periodo?.label || null,
+        // PDF-style per-event buckets
+        totalExtrasMin: 0, totalPaidOTMin: 0, totalAtrasoMin: 0, totalSAMin: 0, totalFaltaMin: 0, totalAbonoMin: 0,
+        // Backward compat
+        totalFaltasMin: 0,
+      });
+    }
+    // Seed users who have working Saturdays even if they have no batidas in range
+    for (const eq of bancoEquipe) {
+      if ((eq.workingSaturdayDates || []).some(d => d >= dateFrom && d <= dateTo) && !byUser.has(eq.userId)) {
+        const um = usersMap.get(eq.userId);
+        seedUser(eq.userId, eq.fullName, eq.groupName, eq.groupColor, um?.meioPeriodo, um?.title, eq);
+      }
+    }
     for (const d of days) {
       if (!d.userId || !(d.batidas||[]).length) continue;
       const eq = equipeMap.get(d.userId);
       if (!byUser.has(d.userId)) {
-        byUser.set(d.userId, {
-          userId: d.userId, fullName: d.fullName,
-          groupName: (eq?.groupName) || d.groupName || "Sem grupo",
-          groupColor: (eq?.groupColor) || d.groupColor || "#94a3b8",
-          meioPeriodo: usersMap.has(d.userId) ? usersMap.get(d.userId).meioPeriodo : d.meioPeriodo,
-          title: usersMap.get(d.userId)?.title || '',
-          workedMin: 0, expectedMin: 0, daysCount: 0, incompleteDays: 0, daysList: [],
-          bancoBalanceMin: eq ? eq.periodBalanceMin : null,
-          previousBalanceMin: eq?.previousBalanceMin ?? null,
-          periodoLabel: eq?.periodo?.label || null,
-          totalExtrasMin: 0, totalFaltasMin: 0, totalPaidOTMin: 0,
-        });
+        seedUser(d.userId, d.fullName,
+          (eq?.groupName) || d.groupName,
+          (eq?.groupColor) || d.groupColor,
+          usersMap.has(d.userId) ? usersMap.get(d.userId).meioPeriodo : d.meioPeriodo,
+          usersMap.get(d.userId)?.title || '',
+          eq);
       }
       const u = byUser.get(d.userId);
       const n = d.batidas.length;
-      const workedMin  = Math.round((d.totalWorkedMs || 0) / 60000);
-      // Use per-DOW schedule from backend (includes 0 for weekends)
       const dow = new Date(d.date + 'T12:00:00Z').getUTCDay();
       const expectedMin = (eq?.dailyExpByDow?.[dow] !== undefined)
         ? eq.dailyExpByDow[dow]
-        : (u.meioPeriodo ? (n <= 2 ? 240 : 480) : 480);
+        : (dow === 6 ? 240 : (u.meioPeriodo ? (n <= 2 ? 240 : 480) : 480));
+      const isSat = dow === 6;
+      const schedStart = eq?.schedStartMin ?? 480;
+      const dev = computeDayDevFromBatidas(d.batidas, expectedMin, isSat, schedStart);
+      const workedMin  = dev.worked;
+      const balanceMin = dev.balance;
+      const lunchMin   = dev.lunchMin;
+      const atrasoMin  = dev.atrasoMin ?? 0;
+      const saMin      = dev.saMin     ?? 0;
+      const extraMin   = dev.extraMin  ?? 0;
+      const paidOTMin  = dev.paidOTMin ?? 0;
       const isPast       = d.date < todayStr;
       const isIncomplete = isPast && n > 0 && n % 2 === 1 && !(u.meioPeriodo && n === 2);
       const entrada = d.batidas[0]?.recordedAt;
       const saida   = n % 2 === 0 ? d.batidas[n - 1]?.recordedAt : null;
-      const rawBalance = workedMin - expectedMin;
-      const toleratedBalance = Math.abs(rawBalance) <= 5 ? 0 : rawBalance;
-      const paidOT = expectedMin > 0 && toleratedBalance > 120 ? toleratedBalance - 120 : 0;
-      // Cap daily banco credit at 2h (120 min); excess is paid overtime, not credited
-      const balanceMin = expectedMin > 0 && toleratedBalance > 120 ? 120 : toleratedBalance;
       u.workedMin  += workedMin;
       u.expectedMin += expectedMin;
+      u.correctedBalanceMin += balanceMin;
       u.daysCount++;
       if (isIncomplete) u.incompleteDays++;
-      if (toleratedBalance > 0) u.totalExtrasMin += toleratedBalance;
-      if (toleratedBalance < 0) u.totalFaltasMin += Math.abs(toleratedBalance);
-      u.totalPaidOTMin += paidOT;
-      u.daysList.push({ date: d.date, workedMin, expectedMin, rawBalance: toleratedBalance, balanceMin, paidOT, n, isIncomplete, entrada, saida });
+      u.totalExtrasMin += extraMin;
+      u.totalPaidOTMin += paidOTMin;
+      u.totalAtrasoMin += atrasoMin;
+      u.totalSAMin     += saMin;
+      // Backward compat (lumps net negatives like the old UI)
+      if (balanceMin < 0) u.totalFaltasMin += Math.abs(balanceMin);
+      u.daysList.push({ date: d.date, workedMin, expectedMin, rawBalance: balanceMin, balanceMin, lunchMin, atrasoMin, saMin, extraMin, paidOTMin, n, isIncomplete, entrada, saida });
+    }
+    // Add absent obligated day rows (Saturdays + weekdays) — these accumulate as "Falta" (full-day absence).
+    // Server pre-filters out holidays/vacation/Sundays in workingSaturdayDates and workingWeekdayDates.
+    for (const u of byUser.values()) {
+      const eq = equipeMap.get(u.userId);
+      const existingDates = new Set(u.daysList.map(d => d.date));
+      const addFalta = (date, exp, dow) => {
+        u.correctedBalanceMin -= exp;
+        u.expectedMin         += exp;
+        u.daysCount++;
+        u.totalFaltaMin       += exp;
+        u.totalFaltasMin      += exp;
+        u.daysList.push({ date, workedMin: 0, expectedMin: exp, rawBalance: -exp, balanceMin: -exp, lunchMin: null, atrasoMin: 0, saMin: 0, extraMin: 0, paidOTMin: 0, faltaMin: exp, n: 0, isIncomplete: false, entrada: null, saida: null });
+      };
+      for (const satDate of (eq?.workingSaturdayDates || [])) {
+        if (satDate >= dateFrom && satDate <= dateTo && !existingDates.has(satDate)) {
+          addFalta(satDate, eq?.dailyExpByDow?.[6] ?? 240, 6);
+        }
+      }
+      for (const wkDate of (eq?.workingWeekdayDates || [])) {
+        if (wkDate >= dateFrom && wkDate <= dateTo && !existingDates.has(wkDate)) {
+          const dow = new Date(wkDate + "T12:00:00Z").getUTCDay();
+          const wkExp = eq?.dailyExpByDow?.[dow] ?? 480;
+          addFalta(wkDate, wkExp, dow);
+        }
+      }
+      u.daysList.sort((a, b) => a.date > b.date ? 1 : -1);
     }
     return [...byUser.values()].map(u => {
-      const eq = equipeMap.get(u.userId);
-      // Use full-period backend values for RESUMO (correct Saturday cap + all calendar days)
-      const totalExtrasMin     = eq?.periodExtrasMin  ?? u.totalExtrasMin;
-      const totalFaltasMin     = eq?.periodFaltasMin  ?? u.totalFaltasMin;
-      const totalPaidOTMin     = eq?.periodPaidOTMin  ?? u.totalPaidOTMin;
-      const extrasACompensarMin = totalExtrasMin - totalPaidOTMin;
-      const faltasACompensarMin = totalFaltasMin;
-      // SALDO DO PERÍODO = authoritative backend banco balance (same as TOTAL chip)
-      const periodoSaldoMin = eq?.periodBalanceMin ?? (extrasACompensarMin - faltasACompensarMin);
-      const saldoAnteriorMin = 0;
+      // Always use client-side totals so the balance reflects the selected date range,
+      // not the full periodo from bank start to today.
+      const extrasACompensarMin = u.totalExtrasMin - (u.totalPaidOTMin || 0);
+      const faltasACompensarMin = u.totalAtrasoMin + u.totalSAMin + u.totalFaltaMin;
+      const periodoSaldoMin     = u.correctedBalanceMin;
+      const saldoAnteriorMin    = 0;
       return {
         ...u,
-        balanceMin: u.bancoBalanceMin !== null ? u.bancoBalanceMin : u.workedMin - u.expectedMin,
-        totalExtrasMin,
-        totalFaltasMin,
-        totalPaidOTMin,
+        balanceMin: u.correctedBalanceMin,
         extrasACompensarMin,
         faltasACompensarMin,
         periodoSaldoMin,
         saldoAnteriorMin,
-        saldoAtualMin: saldoAnteriorMin + periodoSaldoMin,
+        saldoAtualMin: periodoSaldoMin,
       };
     });
   }, [days, todayStr, usersMap]);

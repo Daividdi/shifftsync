@@ -58,35 +58,32 @@ router.post("/", requireAuth, requireRole("hr", "gerencia"), (req, res) => {
 router.put("/:id", requireAuth, requireRole("hr", "gerencia"), (req, res) => {
   const { name, color, dept, leaderId, memberIds = [], team, coLeaderIds = [] } = req.body;
   const db = getDb();
+  const groupId = req.params.id;
 
-  db.prepare("UPDATE groups SET name=?, color=?, dept=?, leader_id=?, team=? WHERE id=?")
-    .run(name, color, dept, leaderId || null, team || null, req.params.id);
-
-  db.prepare("DELETE FROM group_members WHERE group_id = ?").run(req.params.id);
-  const insertMember = db.prepare("INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)");
-  const tx = db.transaction((members) => {
-    for (const uid of members) insertMember.run(req.params.id, uid);
-  });
-  tx(memberIds);
-
-  if (leaderId) {
-    db.prepare("UPDATE users SET role = 'leader' WHERE id = ? AND role = 'employee'").run(leaderId);
-  }
-
-  // Update co-leaders
-  db.prepare("DELETE FROM group_co_leaders WHERE group_id = ?").run(req.params.id);
+  // M5 — Atomic transaction: prevents group becoming empty mid-update if anything fails.
+  const insertMember   = db.prepare("INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)");
   const insertCoLeader = db.prepare("INSERT OR IGNORE INTO group_co_leaders (group_id, user_id) VALUES (?, ?)");
-  const txCo = db.transaction((coLeaders) => {
-    for (const uid of coLeaders) {
-      if (uid !== leaderId) insertCoLeader.run(req.params.id, uid);
+
+  db.transaction(() => {
+    db.prepare("UPDATE groups SET name=?, color=?, dept=?, leader_id=?, team=? WHERE id=?")
+      .run(name, color, dept, leaderId || null, team || null, groupId);
+
+    db.prepare("DELETE FROM group_members WHERE group_id = ?").run(groupId);
+    for (const uid of memberIds) insertMember.run(groupId, uid);
+
+    if (leaderId) {
+      db.prepare("UPDATE users SET role = 'leader' WHERE id = ? AND role = 'employee'").run(leaderId);
     }
-  });
-  txCo(coLeaderIds);
 
-  // Sync future Saturday schedules with updated member list
-  syncScheduleAfterMemberChange(db, req.params.id, team || null);
+    db.prepare("DELETE FROM group_co_leaders WHERE group_id = ?").run(groupId);
+    for (const uid of coLeaderIds) {
+      if (uid !== leaderId) insertCoLeader.run(groupId, uid);
+    }
 
-  const group = db.prepare("SELECT * FROM groups WHERE id = ?").get(req.params.id);
+    syncScheduleAfterMemberChange(db, groupId, team || null);
+  })();
+
+  const group = db.prepare("SELECT * FROM groups WHERE id = ?").get(groupId);
   return res.json(enrichGroup(db, group));
 });
 
@@ -201,7 +198,7 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
           .run(groupId, dateStr, ...memberIds);
       } else {
         db.prepare("DELETE FROM schedules WHERE group_id=? AND date=?").run(groupId, dateStr);
-        return; // Grupo sem membros — limpa e segue
+        continue; // Grupo sem membros — limpa este dia e segue para o próximo
       }
 
       // 2. Determina status correto para este sábado com base no time (A/B)

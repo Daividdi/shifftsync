@@ -24,12 +24,33 @@ function sigWords(name) {
 }
 
 // True if all words in the shorter name appear in the longer name
+// Levenshtein (curto-circuita quando a diferença de tamanho já é >1)
+function levDist(a, b) {
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 1) return 9;
+  const d = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+
 function nameSubsetMatch(nameA, nameB) {
   const wA = sigWords(nameA);
   const wB = sigWords(nameB);
   if (wA.length < 2 || wB.length < 2) return false;
   const [shorter, longer] = wA.length <= wB.length ? [wA, wB] : [wB, wA];
-  return shorter.every(w => longer.includes(w));
+  // Cada palavra do nome menor deve casar no maior — exata, ou com diferença de
+  // 1 letra (no máx. 1 palavra "aproximada"). Cobre erros de digitação do ponto,
+  // ex.: "Gonçalves" → "Gongalves". Conservador, p/ não vincular pessoa errada.
+  let fuzzy = 0;
+  for (const w of shorter) {
+    if (longer.includes(w)) continue;
+    const near = longer.some(lw => lw.length >= 4 && w.length >= 4 && levDist(lw, w) <= 1);
+    if (near) { if (++fuzzy > 1) return false; continue; }
+    return false;
+  }
+  return true;
 }
 
 function getScopedUsers(db, req) {
@@ -146,21 +167,33 @@ function computeIntervals(batidas, meioPeriodo) {
   // Build intervals between consecutive punches
   const intervals = [];
   let totalWorkedMs = 0, totalBreakMs = 0;
+  const SCHED_START_MIN = 8 * 60; // 08:00 — no credit before this (CLT / company policy)
 
   for (let i = 0; i < n - 1; i++) {
     const curr = labeled[i], next = labeled[i + 1];
-    const ms = (next.timeMillis || 0) - (curr.timeMillis || 0);
-    if (ms <= 0) continue;
+    const rawMs = (next.timeMillis || 0) - (curr.timeMillis || 0);
+    if (rawMs <= 0) continue;
     // Even index gap = work period; odd index gap = break period
     const type = i % 2 === 0 ? "work" : "break";
+    // Display always shows actual punch-to-punch duration
     intervals.push({
       from: curr.recordedAt, to: next.recordedAt,
-      durationMs: ms, durationFmt: fmtDuration(ms), type,
+      durationMs: rawMs, durationFmt: fmtDuration(rawMs), type,
     });
-    if (type === "work") totalWorkedMs += ms; else totalBreakMs += ms;
+    // For totalWorkedMs: pre-schedule cap on first work interval (don't credit before 08:00)
+    let creditedMs = rawMs;
+    if (i === 0 && type === "work") {
+      const startD = new Date(curr.timeMillis || 0);
+      const startMin = startD.getUTCHours() * 60 + startD.getUTCMinutes();
+      if (startMin < SCHED_START_MIN) {
+        const capMs = (SCHED_START_MIN - startMin) * 60000;
+        creditedMs = Math.max(0, rawMs - capMs);
+      }
+    }
+    if (type === "work") totalWorkedMs += creditedMs; else totalBreakMs += rawMs;
   }
 
-  // Odd-punch heuristic: last punch >=15h local (BRT=UTC-3) → treat as end-of-day,
+  // Odd-punch heuristic: last punch >=15h display → treat as end-of-day,
   // assume 1h lunch break in the orphaned gap and credit remaining time as work
   if (n >= 3 && n % 2 === 1) {
     const last = sorted[n - 1];
@@ -173,6 +206,9 @@ function computeIntervals(batidas, meioPeriodo) {
       totalBreakMs  = Math.max(0, totalBreakMs + (gapMs - extraMs) - 60 * 60000);
     }
   }
+
+  // Brazilian law (CLT): work > 6h with only 2 punches (no recorded lunch) → deduct 1h
+  if (n === 2 && totalWorkedMs > 6 * 3600000) totalWorkedMs -= 3600000;
 
   // Determine current status
   // Odd total punches = currently working (last punch was a return or entry)
@@ -294,7 +330,7 @@ router.get("/", requireAuth, async (req, res) => {
            b.event_code, b.event_name, b.date, b.recorded_at, b.time_millis, b.approval_status
     FROM ponto_batidas b
     LEFT JOIN users u ON u.id = b.user_id
-    LEFT JOIN group_members gm ON gm.user_id = b.user_id
+    LEFT JOIN (SELECT user_id, group_id FROM group_members GROUP BY user_id) gm ON gm.user_id = b.user_id
     LEFT JOIN groups g ON g.id = gm.group_id
     WHERE b.date BETWEEN ? AND ? AND b.user_id IN (${ph}) AND b.deleted_at IS NULL
     UNION ALL
@@ -315,7 +351,7 @@ router.get("/", requireAuth, async (req, res) => {
            2 as approval_status
     FROM ponto_records p
     JOIN users u ON u.id = p.user_id
-    LEFT JOIN group_members gm ON gm.user_id = p.user_id
+    LEFT JOIN (SELECT user_id, group_id FROM group_members GROUP BY user_id) gm ON gm.user_id = p.user_id
     LEFT JOIN groups g ON g.id = gm.group_id
     WHERE p.source IN ('manual', 'abono') AND p.date BETWEEN ? AND ? AND p.user_id IN (${ph})
     ORDER BY date DESC, time_millis ASC

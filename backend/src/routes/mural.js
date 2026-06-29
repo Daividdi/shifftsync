@@ -72,6 +72,7 @@ function enrichPost(db, post, userId) {
   let pollOptions = null;
   let pollVotes   = null;
   let userVote    = null;
+  let pollVoters  = null;
   if (post.poll_question && post.poll_options) {
     try {
       pollOptions = JSON.parse(post.poll_options);
@@ -80,6 +81,19 @@ function enrichPost(db, post, userId) {
       );
       const voteRow = db.prepare("SELECT option_index FROM mural_poll_votes WHERE post_id=? AND user_id=?").get(post.id, userId);
       userVote = voteRow ? voteRow.option_index : null;
+
+      const reqRole = db.prepare("SELECT role FROM users WHERE id=?").get(userId)?.role || '';
+      if (userId === post.author_id || isAdmin(reqRole)) {
+        pollVoters = pollOptions.map((_, i) =>
+          db.prepare(`
+            SELECT u.full_name as fullName, u.dept
+            FROM mural_poll_votes v
+            JOIN users u ON u.id = v.user_id
+            WHERE v.post_id = ? AND v.option_index = ?
+            ORDER BY v.created_at ASC
+          `).all(post.id, i)
+        );
+      }
     } catch {}
   }
 
@@ -92,6 +106,7 @@ function enrichPost(db, post, userId) {
     pollOptions,
     pollVotes,
     userVote,
+    pollVoters,
     reactionCount,
     userReaction,
     byEmoji,
@@ -161,9 +176,7 @@ router.post("/", requireAuth, upload.single("image"), (req, res) => {
   `).run(id, req.user.id, content.trim(), mediaUrl, finalType, pollQ, pollOpt, commentsVal);
 
   const authorName = db.prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id)?.full_name || "Alguém";
-  const plainText  = content.trim().replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-  const snippet    = plainText.slice(0, 120) + (plainText.length > 120 ? "..." : "");
-  notifyAll(db, req.user.id, "mural_post", id, "Nova publicação no Mural", `${authorName}: "${snippet}"`);
+  notifyAll(db, req.user.id, "mural_post", id, "Nova publicação no Mural", `${authorName} fez uma publicação no Mural`);
 
   const post = db.prepare("SELECT * FROM mural_posts WHERE id=?").get(id);
   return res.status(201).json(enrichPost(db, post, req.user.id));

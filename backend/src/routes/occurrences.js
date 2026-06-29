@@ -240,8 +240,12 @@ const ABONO_REASONS = [
   "Equipamento com Defeito",
   "Trabalho Externo",
   "Ponto em Local Diferente",
+  "Atestado Médico",
+  "Férias",
   "Outros",
 ];
+// Reasons that don't require justification text (the reason itself is self-explanatory).
+const ABONO_REASONS_NO_JUSTIFICATION = new Set(["Atestado Médico", "Férias"]);
 
 function fmtAbono(a, db) {
   const user    = db.prepare("SELECT full_name, username FROM users WHERE id=?").get(a.user_id);
@@ -301,13 +305,25 @@ router.get("/abono", requireAuth, requireRole("hr", "leader"), (req, res) => {
 router.post("/abono", requireAuth, (req, res) => {
   if (!isLeader(req.user.role)) return res.status(403).json({ error: "Sem permissão" });
   const { userId, punchDate, punchDateTo, punchTime, punchTimeTo, punchType, reason, justification } = req.body;
-  const isRange = !!(punchTime && punchTimeTo);
-  if (!userId || !punchDate || (!punchTime && !punchTimeTo) || !reason || !justification)
+  const isMultiDay = !!(punchDateTo && punchDateTo !== punchDate);
+  const isInterval = !!(punchTime && punchTimeTo);
+  const justificationRequired = !ABONO_REASONS_NO_JUSTIFICATION.has(reason);
+  // Multi-day range → full day, no times required. Single day → time required.
+  if (!userId || !punchDate || (!isMultiDay && !punchTime && !punchTimeTo) || !reason || (justificationRequired && !justification))
     return res.status(400).json({ error: "Todos os campos são obrigatórios" });
-  if (!isRange && !["entrada", "saida"].includes(punchType))
+  if (!isInterval && !isMultiDay && !["entrada", "saida"].includes(punchType))
     return res.status(400).json({ error: "punchType inválido" });
   if (!ABONO_REASONS.includes(reason))
     return res.status(400).json({ error: "Motivo inválido" });
+  // I2 — date/time order validation
+  if (punchDateTo && punchDateTo < punchDate)
+    return res.status(400).json({ error: "Data final do abono não pode ser anterior à data inicial" });
+  if (isInterval) {
+    const [h1, m1] = punchTime.split(':').map(Number);
+    const [h2, m2] = punchTimeTo.split(':').map(Number);
+    if ((h2 * 60 + m2) <= (h1 * 60 + m1))
+      return res.status(400).json({ error: "Hora final do abono deve ser posterior à hora inicial" });
+  }
 
   const db = getDb();
 
@@ -321,7 +337,7 @@ router.post("/abono", requireAuth, (req, res) => {
 
   const grpData = db.prepare("SELECT group_id FROM group_members WHERE user_id=? LIMIT 1").get(userId);
   const id = uuidv4();
-  const effectivePunchType = isRange ? "saida" : punchType;
+  const effectivePunchType = (isMultiDay || isInterval) ? "saida" : punchType;
   db.prepare(`
     INSERT INTO abono_requests (id, user_id, group_id, punch_date, punch_date_to, punch_time, punch_time_to, punch_type, reason, justification, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -329,6 +345,76 @@ router.post("/abono", requireAuth, (req, res) => {
 
   return res.status(201).json(fmtAbono(db.prepare("SELECT * FROM abono_requests WHERE id=?").get(id), db));
 });
+
+// Helper — remove all source='abono' ponto_records that match this abono's date range.
+function removeAbonoPontoRecords(db, a) {
+  const dateStart = new Date((a.punch_date || '').slice(0, 10) + 'T12:00:00Z');
+  const dateEnd   = a.punch_date_to
+    ? new Date(a.punch_date_to.slice(0, 10) + 'T12:00:00Z')
+    : new Date(dateStart);
+  const del = db.prepare(`
+    DELETE FROM ponto_records WHERE user_id=? AND date=? AND source='abono'
+      AND (
+        ? IS NULL
+        OR (recorded_at >= ? || 'T' || ? || ':00' AND recorded_at <= ? || 'T' || ? || ':00')
+      )
+  `);
+  for (let cur = new Date(dateStart); cur <= dateEnd; cur.setUTCDate(cur.getUTCDate() + 1)) {
+    const d = cur.toISOString().slice(0, 10);
+    const t1 = a.punch_time     || null;
+    const t2 = a.punch_time_to  || a.punch_time || null;
+    del.run(a.user_id, d, t1, d, t1, d, t2);
+  }
+}
+
+// Helper — insert ponto_records for an approved abono.
+function insertAbonoPontoRecords(db, a, createdBy) {
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO ponto_records (id, user_id, type, recorded_at, date, source, created_by)
+    VALUES (?, ?, ?, ?, ?, 'abono', ?)
+  `);
+  // I4 — full-day abono uses the user's sched_start_minutes (defaults to 08:00).
+  const userRow = db.prepare("SELECT sched_start_minutes FROM users WHERE id=?").get(a.user_id);
+  const SS = userRow?.sched_start_minutes ?? 480;
+  const fmt = mn => `${String(Math.floor(mn/60)).padStart(2,'0')}:${String(mn%60).padStart(2,'0')}`;
+  const dateStart = new Date((a.punch_date || '').slice(0, 10) + 'T12:00:00Z');
+  const dateEnd   = a.punch_date_to
+    ? new Date(a.punch_date_to.slice(0, 10) + 'T12:00:00Z')
+    : new Date(dateStart);
+  for (let cur = new Date(dateStart); cur <= dateEnd; cur.setUTCDate(cur.getUTCDate() + 1)) {
+    const dow = cur.getUTCDay();
+    if (dow === 0 || dow === 6) continue; // skip weekends
+    const d = cur.toISOString().slice(0, 10);
+    if (a.punch_time && a.punch_time_to) {
+      const [h1, m1] = a.punch_time.split(':').map(Number);
+      const [h2, m2] = a.punch_time_to.split(':').map(Number);
+      const durMins  = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (durMins >= 300) {
+        const ls = h1 * 60 + m1 + 240;
+        const le = ls + 60;
+        ins.run(uuidv4(), a.user_id, "saida",   `${d}T${a.punch_time}:00`,  d, createdBy);
+        ins.run(uuidv4(), a.user_id, "entrada", `${d}T${fmt(ls)}:00`,        d, createdBy);
+        ins.run(uuidv4(), a.user_id, "saida",   `${d}T${fmt(le)}:00`,        d, createdBy);
+        ins.run(uuidv4(), a.user_id, "entrada", `${d}T${a.punch_time_to}:00`, d, createdBy);
+      } else {
+        ins.run(uuidv4(), a.user_id, "saida",   `${d}T${a.punch_time}:00`,    d, createdBy);
+        ins.run(uuidv4(), a.user_id, "entrada", `${d}T${a.punch_time_to}:00`, d, createdBy);
+      }
+    } else if (a.punch_time) {
+      ins.run(uuidv4(), a.user_id, a.punch_type, `${d}T${a.punch_time}:00`, d, createdBy);
+    } else {
+      // Full-day: 8h work shifted by user's schedStart. Standard pattern: SS → SS+4h | SS+5h → SS+9h
+      const entry = SS;            // e.g., 08:00 or 09:00
+      const lunchOut = SS + 240;   // 4h after entry
+      const lunchIn  = SS + 300;   // 1h lunch
+      const exit     = SS + 540;   // 8h work + 1h lunch from entry
+      ins.run(uuidv4(), a.user_id, "saida",   `${d}T${fmt(entry)}:00`,    d, createdBy);
+      ins.run(uuidv4(), a.user_id, "entrada", `${d}T${fmt(lunchOut)}:00`, d, createdBy);
+      ins.run(uuidv4(), a.user_id, "saida",   `${d}T${fmt(lunchIn)}:00`,  d, createdBy);
+      ins.run(uuidv4(), a.user_id, "entrada", `${d}T${fmt(exit)}:00`,     d, createdBy);
+    }
+  }
+}
 
 // PATCH /api/occurrences/abono/:id — approve or reject (HR only)
 router.patch("/abono/:id", requireAuth, (req, res) => {
@@ -340,33 +426,66 @@ router.patch("/abono/:id", requireAuth, (req, res) => {
   if (!["approved", "rejected"].includes(status))
     return res.status(400).json({ error: "Status inválido" });
 
-  db.prepare(`UPDATE abono_requests SET status=?, review_note=?, reviewed_by=?, reviewed_at=datetime('now'), updated_at=datetime('now') WHERE id=?`)
-    .run(status, reviewNote || null, req.user.id, req.params.id);
+  db.transaction(() => {
+    db.prepare(`UPDATE abono_requests SET status=?, review_note=?, reviewed_by=?, reviewed_at=datetime('now'), updated_at=datetime('now') WHERE id=?`)
+      .run(status, reviewNote || null, req.user.id, req.params.id);
+    if (status === "approved") {
+      const fresh = db.prepare("SELECT * FROM abono_requests WHERE id=?").get(req.params.id);
+      insertAbonoPontoRecords(db, fresh, req.user.id);
+    } else {
+      removeAbonoPontoRecords(db, a);
+    }
+  })();
 
-  // On approval: insert virtual punch(es) into ponto_records so they appear in batidas/saldo
-  if (status === "approved") {
-    const ins = db.prepare(`
-      INSERT OR IGNORE INTO ponto_records (id, user_id, type, recorded_at, date, source, created_by)
-      VALUES (?, ?, ?, ?, ?, 'abono', ?)
-    `);
-    db.transaction(() => {
-      const dateStart = new Date((a.punch_date || '').slice(0, 10) + 'T12:00:00Z');
-      const dateEnd   = a.punch_date_to
-        ? new Date(a.punch_date_to.slice(0, 10) + 'T12:00:00Z')
-        : new Date(dateStart);
-      for (let cur = new Date(dateStart); cur <= dateEnd; cur.setUTCDate(cur.getUTCDate() + 1)) {
-        const dow = cur.getUTCDay();
-        if (dow === 0 || dow === 6) continue; // skip weekends
-        const d = cur.toISOString().slice(0, 10);
-        if (a.punch_time && a.punch_time_to) {
-          ins.run(uuidv4(), a.user_id, "saida",   `${d}T${a.punch_time}:00`,    d, req.user.id);
-          ins.run(uuidv4(), a.user_id, "entrada", `${d}T${a.punch_time_to}:00`, d, req.user.id);
-        } else if (a.punch_time) {
-          ins.run(uuidv4(), a.user_id, a.punch_type, `${d}T${a.punch_time}:00`, d, req.user.id);
-        }
-      }
-    })();
+  return res.json(fmtAbono(db.prepare("SELECT * FROM abono_requests WHERE id=?").get(req.params.id), db));
+});
+
+// PUT /api/occurrences/abono/:id — edit fields (creator/leader on pending; admin on any status)
+router.put("/abono/:id", requireAuth, (req, res) => {
+  if (!isLeader(req.user.role)) return res.status(403).json({ error: "Sem permissão" });
+  const db = getDb();
+  const a = db.prepare("SELECT * FROM abono_requests WHERE id=?").get(req.params.id);
+  if (!a) return res.status(404).json({ error: "Não encontrado" });
+  if (a.created_by !== req.user.id && !isAdmin(req.user.role))
+    return res.status(403).json({ error: "Sem permissão" });
+  if (a.status !== "pending" && !isAdmin(req.user.role))
+    return res.status(400).json({ error: "Apenas abonos pendentes podem ser editados" });
+
+  const { punchDate, punchDateTo, punchTime, punchTimeTo, punchType, reason, justification } = req.body;
+  const isMultiDay = !!(punchDateTo && punchDateTo !== punchDate);
+  const isInterval = !!(punchTime && punchTimeTo);
+  const justificationRequired = !ABONO_REASONS_NO_JUSTIFICATION.has(reason);
+  if (!punchDate || (!isMultiDay && !punchTime && !punchTimeTo) || !reason || (justificationRequired && !justification))
+    return res.status(400).json({ error: "Todos os campos são obrigatórios" });
+  if (!isInterval && !isMultiDay && !["entrada", "saida"].includes(punchType))
+    return res.status(400).json({ error: "punchType inválido" });
+  if (!ABONO_REASONS.includes(reason))
+    return res.status(400).json({ error: "Motivo inválido" });
+  // I2 — date/time order validation
+  if (punchDateTo && punchDateTo < punchDate)
+    return res.status(400).json({ error: "Data final do abono não pode ser anterior à data inicial" });
+  if (isInterval) {
+    const [h1, m1] = punchTime.split(':').map(Number);
+    const [h2, m2] = punchTimeTo.split(':').map(Number);
+    if ((h2 * 60 + m2) <= (h1 * 60 + m1))
+      return res.status(400).json({ error: "Hora final do abono deve ser posterior à hora inicial" });
   }
+
+  const effectivePunchType = (isMultiDay || isInterval) ? "saida" : punchType;
+  const wasApproved = a.status === "approved";
+
+  db.transaction(() => {
+    if (wasApproved) removeAbonoPontoRecords(db, a);
+    db.prepare(`
+      UPDATE abono_requests
+      SET punch_date=?, punch_date_to=?, punch_time=?, punch_time_to=?, punch_type=?, reason=?, justification=?, updated_at=datetime('now')
+      WHERE id=?
+    `).run(punchDate, punchDateTo || null, punchTime || null, punchTimeTo || null, effectivePunchType, reason, justification, req.params.id);
+    if (wasApproved) {
+      const fresh = db.prepare("SELECT * FROM abono_requests WHERE id=?").get(req.params.id);
+      insertAbonoPontoRecords(db, fresh, req.user.id);
+    }
+  })();
 
   return res.json(fmtAbono(db.prepare("SELECT * FROM abono_requests WHERE id=?").get(req.params.id), db));
 });
@@ -387,8 +506,18 @@ router.delete("/abono/:id", requireAuth, (req, res) => {
     const _de = a.punch_date_to ? new Date(a.punch_date_to.slice(0,10)+'T12:00:00Z') : new Date(_ds);
     for (let _c = new Date(_ds); _c <= _de; _c.setUTCDate(_c.getUTCDate()+1)) {
       const _d = _c.toISOString().slice(0,10);
-      if (a.punch_time)    db.prepare("DELETE FROM ponto_records WHERE user_id=? AND date=? AND recorded_at=? AND source='abono'").run(a.user_id, _d, `${_d}T${a.punch_time}:00`);
-      if (a.punch_time_to) db.prepare("DELETE FROM ponto_records WHERE user_id=? AND date=? AND recorded_at=? AND source='abono'").run(a.user_id, _d, `${_d}T${a.punch_time_to}:00`);
+      if (a.punch_time && a.punch_time_to) {
+        // Interval: delete all source='abono' punches within the time range
+        db.prepare("DELETE FROM ponto_records WHERE user_id=? AND date=? AND source='abono' AND recorded_at >= ? AND recorded_at <= ?")
+          .run(a.user_id, _d, `${_d}T${a.punch_time}:00`, `${_d}T${a.punch_time_to}:00`);
+      } else if (a.punch_time) {
+        db.prepare("DELETE FROM ponto_records WHERE user_id=? AND date=? AND recorded_at=? AND source='abono'")
+          .run(a.user_id, _d, `${_d}T${a.punch_time}:00`);
+      } else {
+        // Full-day range (no times): delete all source='abono' for this date
+        db.prepare("DELETE FROM ponto_records WHERE user_id=? AND date=? AND source='abono'")
+          .run(a.user_id, _d);
+      }
     }
   }
   db.prepare("DELETE FROM abono_requests WHERE id=?").run(req.params.id);

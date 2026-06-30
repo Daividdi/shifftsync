@@ -199,15 +199,16 @@ export default function PersonalIndicatorsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 14 }}>
         {[["👥 Colaboradores", n, T.t1, teamGroup === "ALL" ? `${groups.length} times` : grpShort(teamGroup)],
           ["🎯 Atingimento médio", fmt(mAtt) + "%", mAtt >= 100 ? T.green : T.amber, `${acima} de ${n} acima da meta`],
-          ["⭐ Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "média de nota do time"],
-          ["⚠️ Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo da meta ou baixas <6"]].map(([l, v, c, f], i) => (
+          ["⭐ Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "nota média dos médicos (0–10)"],
+          ["⚠️ Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo de 80% da meta, ou qualidade <6"]].map(([l, v, c, f], i) => (
           <div key={i} style={card}><div style={h3}>{l}</div><div style={{ fontSize: 30, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 11, color: T.t6, marginTop: 7 }}>{f}</div></div>
         ))}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}>
-          <div style={h3}><span style={dot(T.green)} />Destaques vs período anterior</div>
+          <div style={h3}><span style={dot(T.green)} />Maiores variações vs período anterior</div>
+          <div style={{ fontSize: 11, color: T.t9, marginTop: -2, marginBottom: 9 }}>Variação do atingimento (% da meta) — quem mais subiu ou caiu, em pontos (p.p.)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div>
               <div style={{ fontSize: 11, color: T.green, fontWeight: 700, marginBottom: 7 }}>▲ Maiores avanços</div>
@@ -230,7 +231,7 @@ export default function PersonalIndicatorsPage() {
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: T.t9, marginTop: 8 }}>Quantos colaboradores em cada faixa de atingimento.</div>
+          <div style={{ fontSize: 11, color: T.t9, marginTop: 8 }}>Quantos colaboradores em cada faixa: vermelho &lt;80%, âmbar 80–99%, verde ≥100% da meta.</div>
         </div>
       </div>
 
@@ -242,8 +243,8 @@ export default function PersonalIndicatorsPage() {
       {(tP != null && cP != null) || (tQ != null && cQ != null) ? <div style={{ ...card, marginBottom: 14 }}>
         <div style={h3}><span style={dot(T.purple)} />Time vs empresa — {trend?.monthLabel}</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 26 }}>
-          {tP != null && cP != null && <RangeBar T={T} markerLabel="empresa" label="Atingimento (volume)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
-          {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 6) / 4 * 100} markerPct={(cQ - 6) / 4 * 100} scale={["6,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
+          {tP != null && cP != null && <RangeBar T={T} markerLabel="empresa" label="Atingimento (% da meta)" valueLabel={`time ${fmt(tP)}%`} valueColor={T.accent} fillPct={tP / Math.max(tP, cP, 1) * 100} markerPct={cP / Math.max(tP, cP, 1) * 100} scale={["0", `empresa ${fmt(cP)}%`, `${fmt(Math.max(tP, cP))}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`} note={tP >= cP ? `▲ +${fmt(tP - cP)} p.p. vs empresa` : `▼ ${fmt(cP - tP)} p.p. vs empresa`} noteColor={tP >= cP ? T.green : T.red} />}
+          {tQ != null && cQ != null && <RangeBar T={T} markerLabel="empresa" label="Qualidade (nota 0–10)" valueLabel={`time ${fmt(tQ, 2)}`} valueColor={T.amber} fillPct={(tQ - 6) / 4 * 100} markerPct={(cQ - 6) / 4 * 100} scale={["6,0", `empresa ${fmt(cQ, 2)}`, "10"]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`} note={tQ >= cQ ? `▲ ${fmt(tQ - cQ, 2)} vs empresa` : `▼ ${fmt(cQ - tQ, 2)} vs empresa`} noteColor={tQ >= cQ ? T.green : T.red} />}
         </div>
       </div> : null}
 
@@ -402,15 +403,15 @@ export default function PersonalIndicatorsPage() {
           {/* KPIs */}
           <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div style={card}>
-              <div style={h3}><span style={dot(T.accent)} />Atingimento (volume)</div>
+              <div style={h3}><span style={dot(T.accent)} />Atingimento (% da meta)</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.accent }}>{fmt(headPct)}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                {granPt ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · {gran === "day" ? "dia" : "semana"}</span> : <>{a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · meta 100%</>}
+                {granPt ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · {gran === "day" ? "dia" : "semana"}</span> : <>{a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · 100% = meta batida</>}
               </div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{granPt ? <>{fmt(granCases, 1)} casos · {granDays} {gran === "day" ? "dia" : "dias"}</> : <>{fmt(a.completed, 1)} casos · {a.days} dias</>}</div>
             </div>}
             <div style={card}>
-              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota)</div>
+              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota 0–10)</div>
               <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{granQ ? fmt(granQ.score, 2) : (q ? fmt(q.score, 2) : "—")}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 {granQ ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · semana</span> : <>{q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0{granPt ? " · mês" : ""}</>}
@@ -434,11 +435,11 @@ export default function PersonalIndicatorsPage() {
           <div style={{ ...card, marginBottom: 14 }}>
             <div style={h3}><span style={dot(T.purple)} />Você vs o grupo {d.group} — média &amp; melhor</div>
             <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,520px)" : "1fr 1fr", gap: 26 }}>
-              {!qualityOnly && <RangeBar T={T} label="Atingimento (volume)" valueLabel={`você ${fmt(a.pct)}%`} valueColor={T.accent}
+              {!qualityOnly && <RangeBar T={T} label="Atingimento (% da meta)" valueLabel={`você ${fmt(a.pct)}%`} valueColor={T.accent}
                 fillPct={a.pct / a.groupBest * 100} markerPct={a.groupAvg / a.groupBest * 100}
                 scale={["0", `média ${fmt(a.groupAvg)}%`, `melhor ${fmt(a.groupBest)}%`]} fill={`linear-gradient(90deg, ${T.accentDark}, ${T.accent})`}
                 note={aboveAvg ? `▲ +${fmt(a.pct - a.groupAvg)} p.p. acima da média` : `▼ ${fmt(a.groupAvg - a.pct)} p.p. abaixo da média`} noteColor={aboveAvg ? T.green : T.red} />}
-              {q && <RangeBar T={T} label="Qualidade (nota)" valueLabel={`você ${fmt(q.score, 2)}`} valueColor={T.amber}
+              {q && <RangeBar T={T} label="Qualidade (nota 0–10)" valueLabel={`você ${fmt(q.score, 2)}`} valueColor={T.amber}
                 fillPct={(q.score - 6) / 4 * 100} markerPct={(q.groupAvg - 6) / 4 * 100}
                 scale={["6,0", `média ${fmt(q.groupAvg, 2)}`, `melhor ${fmt(q.groupBest, 2)}`]} fill={`linear-gradient(90deg, #b46e09, ${T.amber})`}
                 note={q.score >= q.groupAvg ? `▲ ${fmt(q.score - q.groupAvg, 2)} acima da média` : `▼ ${fmt(q.groupAvg - q.score, 2)} abaixo da média — sua oportunidade`} noteColor={q.score >= q.groupAvg ? T.green : T.red} />}

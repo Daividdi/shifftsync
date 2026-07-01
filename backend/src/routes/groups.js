@@ -189,6 +189,11 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
     "INSERT OR REPLACE INTO schedules (id, group_id, date, user_id, status) VALUES (?, ?, ?, ?, ?)"
   );
 
+  // Usuários que nunca trabalham sábado entram sempre como "off"
+  const noSatSet = new Set(
+    db.prepare("SELECT id FROM users WHERE no_saturday=1").all().map(r => r.id)
+  );
+
   db.transaction(() => {
     for (const dateStr of futureDates) {
       // 1. Remove membros que saíram do grupo
@@ -202,7 +207,7 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
       }
 
       // 2. Determina status correto para este sábado com base no time (A/B)
-      const satIndex = getSaturdayIndexInMonth(new Date(dateStr + "T12:00:00"));
+      const satIndex = globalSatIdx(new Date(dateStr + "T12:00:00"));
       let newMemberStatus;
       if (team === "A") {
         newMemberStatus = satIndex % 2 === 0 ? "working" : "off";
@@ -211,7 +216,7 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
       } else {
         // Sem time definido: usa o status majoritário dos membros já existentes nesta data
         const existing = db.prepare(
-          "SELECT status FROM schedules WHERE group_id=? AND date=? LIMIT 1"
+          "SELECT status FROM schedules WHERE group_id=? AND date=? GROUP BY status ORDER BY COUNT(*) DESC LIMIT 1"
         ).get(groupId, dateStr);
         newMemberStatus = existing?.status || "working";
       }
@@ -222,7 +227,7 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
           "SELECT 1 FROM schedules WHERE group_id=? AND date=? AND user_id=?"
         ).get(groupId, dateStr, uid);
         if (!exists) {
-          insertOrReplace.run(uuidv4(), groupId, dateStr, uid, newMemberStatus);
+          insertOrReplace.run(uuidv4(), groupId, dateStr, uid, noSatSet.has(uid) ? "off" : newMemberStatus);
         }
         // 4. Remove o membro de qualquer outro grupo na mesma data (evita duplicata após troca de grupo)
         db.prepare("DELETE FROM schedules WHERE user_id=? AND date=? AND group_id!=?")
@@ -232,16 +237,13 @@ function syncScheduleAfterMemberChange(db, groupId, team) {
   })();
 }
 
-// Retorna o índice (0-based) do sábado dentro do seu mês (0=primeiro sáb, 1=segundo, etc.)
-function getSaturdayIndexInMonth(date) {
-  const d = new Date(date.getFullYear(), date.getMonth(), 1);
-  while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
-  let idx = 0;
-  while (d.toDateString() !== date.toDateString() && idx < 6) {
-    d.setDate(d.getDate() + 7);
-    idx++;
-  }
-  return idx;
+// Índice global de sábado — MESMO época/paridade do /auto em schedule.js.
+// A alternância A/B é contínua entre meses; um índice reiniciado por mês
+// inverte a rotação nos meses em que a paridade global não coincide, fazendo
+// quem trabalhou no sábado anterior aparecer trabalhando de novo no seguinte.
+const SAT_EPOCH = new Date('2023-12-30T12:00:00Z');
+function globalSatIdx(sat) {
+  return Math.round((sat.getTime() - SAT_EPOCH.getTime()) / (7 * 86400000));
 }
 
 module.exports = router;

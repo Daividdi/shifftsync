@@ -176,7 +176,14 @@ async function syncFaceumBatidas(overrideFrom, overrideTo) {
       "SELECT DISTINCT colaborador_cpf, user_id FROM ponto_batidas " +
       "WHERE user_id IS NOT NULL AND colaborador_cpf IS NOT NULL AND colaborador_cpf != '' AND colaborador_cpf != '0'"
     ).all();
-    const cpfToUser = new Map(existingCpf.map(r => [r.colaborador_cpf.replace(/\D/g,""), allUsers.find(u=>u.id===r.user_id)]));
+    const cpfToUser = new Map(existingCpf.flatMap(r => {
+      const batidaCpf = r.colaborador_cpf.replace(/\D/g, "");
+      const u = allUsers.find(x => x.id === r.user_id);
+      // Drop stale links that contradict the user's CPF on file (homonym cleanup)
+      const uCpf = (u?.cpf || "").replace(/\D/g, "");
+      if (!u || (uCpf && uCpf !== batidaCpf)) return [];
+      return [[batidaCpf, u]];
+    }));
     // Direct CPF match from users table (handles name mismatches)
     const userByCpfField = new Map(allUsers.filter(u => u.cpf).map(u => [(u.cpf||"").replace(/\D/g,""), u]));
     // Name-based fallback for new users not yet in batidas
@@ -186,6 +193,9 @@ async function syncFaceumBatidas(overrideFrom, overrideTo) {
     const userByFaceumCpf  = new Map();
     const userByFaceumName = new Map();
     for (const u of allUsers) {
+      // CPF on file is authoritative — userByCpfField already links these users;
+      // name matching here would risk binding a homonym from another location.
+      if ((u.cpf || "").replace(/\D/g, "")) continue;
       const col = faceumByName.get(normName(u.full_name));
       if (col) { userByFaceumCpf.set((col.cpf||"").replace(/\D/g,""), u); userByFaceumName.set(normName(col.name||col.nome||""), u); }
     }

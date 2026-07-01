@@ -56,15 +56,15 @@ function nameSubsetMatch(nameA, nameB) {
 function getScopedUsers(db, req) {
   const { role, id: userId } = req.user;
   if (isAdmin(role)) {
-    return db.prepare("SELECT id, full_name, meio_periodo FROM users WHERE active=1").all();
+    return db.prepare("SELECT id, full_name, meio_periodo, cpf FROM users WHERE active=1").all();
   }
   if (isLeader(role)) {
     const groupIds = getLeaderGroupIds(db, userId);
-    const me = db.prepare("SELECT id, full_name, meio_periodo FROM users WHERE id=?").get(userId);
+    const me = db.prepare("SELECT id, full_name, meio_periodo, cpf FROM users WHERE id=?").get(userId);
     if (!groupIds.length) return me ? [me] : [];
     const ph = groupIds.map(() => "?").join(",");
     const members = db.prepare(
-      `SELECT DISTINCT u.id, u.full_name, u.meio_periodo FROM users u
+      `SELECT DISTINCT u.id, u.full_name, u.meio_periodo, u.cpf FROM users u
        JOIN group_members gm ON gm.user_id=u.id
        WHERE gm.group_id IN (${ph}) AND u.active=1`
     ).all(...groupIds);
@@ -72,12 +72,12 @@ function getScopedUsers(db, req) {
     for (const gid of groupIds) {
       const g = db.prepare("SELECT leader_id FROM groups WHERE id=?").get(gid);
       if (g?.leader_id && !members.find(m => m.id === g.leader_id)) {
-        const lu = db.prepare("SELECT id, full_name, meio_periodo FROM users WHERE id=? AND active=1").get(g.leader_id);
+        const lu = db.prepare("SELECT id, full_name, meio_periodo, cpf FROM users WHERE id=? AND active=1").get(g.leader_id);
         if (lu) members.push(lu);
       }
       db.prepare("SELECT user_id FROM group_co_leaders WHERE group_id=?").all(gid).forEach(cl => {
         if (!members.find(m => m.id === cl.user_id)) {
-          const cu = db.prepare("SELECT id, full_name, meio_periodo FROM users WHERE id=? AND active=1").get(cl.user_id);
+          const cu = db.prepare("SELECT id, full_name, meio_periodo, cpf FROM users WHERE id=? AND active=1").get(cl.user_id);
           if (cu) members.push(cu);
         }
       });
@@ -86,33 +86,45 @@ function getScopedUsers(db, req) {
     if (me && !members.find(m => m.id === userId)) members.push(me);
     return members;
   }
-  const me = db.prepare("SELECT id, full_name, meio_periodo FROM users WHERE id=?").get(userId);
+  const me = db.prepare("SELECT id, full_name, meio_periodo, cpf FROM users WHERE id=?").get(userId);
   return me ? [me] : [];
 }
 
 async function buildFaceumMatch(scopedUsers) {
   const colaboradores = await faceum.getColaboradores();
   const faceumByName  = new Map(colaboradores.map(c => [normalizeName(c.nome || c.name || ""), c]));
+  const faceumByCpf   = new Map(colaboradores.map(c => [String(c.cpf || "").replace(/\D/g, ""), c]));
   const userByFaceumCpf  = new Map();
   const userByFaceumName = new Map();
 
   for (const u of scopedUsers) {
-    // 1. Exact normalized name match
-    let col = faceumByName.get(normalizeName(u.full_name));
+    let col = null;
 
-    // 2. Subset word match fallback: all significant words of the shorter name
-    //    must appear in the longer name (handles "de/da/do" connectors and extra middle names)
-    if (!col) {
-      for (const c of colaboradores) {
-        if (nameSubsetMatch(u.full_name, c.nome || c.name || "")) {
-          col = c;
-          break;
+    // 0. CPF is authoritative: if the user has a CPF on file, only accept the
+    //    colaborador with that exact CPF. Never fall back to name matching —
+    //    homonyms from other locations would be wrongly linked (e.g. two
+    //    "Victor Hugo da Silva" in different units).
+    const userCpf = String(u.cpf || "").replace(/\D/g, "");
+    if (userCpf) {
+      col = faceumByCpf.get(userCpf) || null;
+    } else {
+      // 1. Exact normalized name match
+      col = faceumByName.get(normalizeName(u.full_name));
+
+      // 2. Subset word match fallback: all significant words of the shorter name
+      //    must appear in the longer name (handles "de/da/do" connectors and extra middle names)
+      if (!col) {
+        for (const c of colaboradores) {
+          if (nameSubsetMatch(u.full_name, c.nome || c.name || "")) {
+            col = c;
+            break;
+          }
         }
       }
     }
 
     if (col) {
-      userByFaceumCpf.set(col.cpf, u);
+      userByFaceumCpf.set(String(col.cpf || "").replace(/\D/g, ""), u);
       userByFaceumName.set(normalizeName(col.nome || col.name || ""), u);
     }
   }

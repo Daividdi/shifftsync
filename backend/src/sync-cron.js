@@ -425,18 +425,66 @@ async function sendPendingNotifications() {
   }
 }
 
+// ── Anúncio de Aniversários ───────────────────────────────────────────
+// No dia do aniversário de um colega, todos os usuários ativos recebem uma
+// notificação (e o aniversariante recebe os parabéns). Dedup por ref_id.
+async function sendBirthdayAnnouncements() {
+  console.log("[Birthdays] Verificando aniversariantes...");
+  try {
+    const db = getDb();
+    // Data local de Brasília — o container roda em UTC
+    const todayLocal = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const mmdd = todayLocal.slice(5);
+
+    const aniversariantes = db.prepare(
+      "SELECT id, full_name, dept FROM users WHERE active=1 AND birth_date IS NOT NULL AND substr(birth_date, 6) = ?"
+    ).all(mmdd);
+    if (!aniversariantes.length) { console.log("[Birthdays] Nenhum aniversariante hoje."); return; }
+
+    const recipients = db.prepare("SELECT id FROM users WHERE active=1").all().map(r => r.id);
+
+    const insertNotif = db.prepare(`
+      INSERT INTO notifications (id, user_id, type, ref_id, title, body)
+      SELECT ?, ?, 'birthday', ?, ?, ?
+      WHERE NOT EXISTS (
+        SELECT 1 FROM notifications WHERE user_id = ? AND ref_id = ?
+      )
+    `);
+
+    for (const b of aniversariantes) {
+      const refId = `birthday_${b.id}_${todayLocal}`;
+      db.transaction(() => {
+        for (const uid of recipients) {
+          const isOwn = uid === b.id;
+          const title = isOwn ? "🎂 Feliz aniversário!" : `🎂 Aniversário hoje: ${b.full_name}`;
+          const body  = isOwn
+            ? "A equipe te deseja um feliz aniversário!"
+            : `Hoje é aniversário de ${b.full_name}${b.dept ? ` (${b.dept})` : ""}. Não esqueça de parabenizar! 🎉`;
+          insertNotif.run(uuidv4(), uid, refId, title, body, uid, refId);
+        }
+      })();
+      console.log(`[Birthdays] ${b.full_name} → ${recipients.length} destinatários`);
+    }
+  } catch (err) {
+    console.error("[Birthdays] Erro:", err.message);
+  }
+}
+
 // Backfill na inicialização para popular notificações imediatamente
 setTimeout(async () => {
   console.log("[Notifs] Backfill de notificações na inicialização...");
   await sendVacationReminders();
   await sendPendingNotifications();
+  await sendBirthdayAnnouncements();
 }, 12000);
 
 // Cron diário às 07:00
 cron.schedule("0 7 * * *", async () => {
   await sendVacationReminders();
   await sendPendingNotifications();
+  await sendBirthdayAnnouncements();
 });
 
 module.exports.sendVacationReminders = sendVacationReminders;
 module.exports.sendPendingNotifications = sendPendingNotifications;
+module.exports.sendBirthdayAnnouncements = sendBirthdayAnnouncements;

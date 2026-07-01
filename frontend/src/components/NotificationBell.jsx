@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Bell, Umbrella, ArrowLeftRight, CheckCheck, X, Newspaper, FileText, ClipboardList } from "lucide-react";
+import { Bell, Umbrella, ArrowLeftRight, CheckCheck, X, Newspaper, FileText, ClipboardList, Cake } from "lucide-react";
 import { useNotifications } from "../hooks/useNotifications";
 
 function timeAgo(dateStr) {
@@ -21,6 +21,7 @@ const TYPE_META = {
   vacation_reminder: { Icon: Umbrella,       color: "#A78BFA", label: "Lembrete Férias", page: "vacations" },
   vacation_pending:  { Icon: Umbrella,       color: "#F59E0B", label: "Férias Pendente",  page: "vacations" },
   swap_pending:      { Icon: ArrowLeftRight, color: "#3B82F6", label: "Troca Pendente",   page: "swaps"     },
+  birthday:          { Icon: Cake,           color: "#EC4899", label: "Aniversário",      page: "birthdays" },
 };
 function getMeta(type) {
   return TYPE_META[type] || { Icon: Bell, color: "#94a3b8", label: "Notificação", page: null };

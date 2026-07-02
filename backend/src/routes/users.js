@@ -43,9 +43,13 @@ router.get("/birthdays", requireAuth, (req, res) => {
     "SELECT id, username, full_name, dept, birth_date FROM users WHERE active=1 AND birth_date IS NOT NULL ORDER BY full_name"
   ).all();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayMMDD = `${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  // "Hoje" no fuso de Brasília — o container roda em UTC
+  const nowLocal = new Date(Date.now() - 3 * 3600000);
+  const today = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate()));
+  const todayStr = today.toISOString().slice(0, 10);
+  const todayMMDD = todayStr.slice(5);
+
+  const wishExists = db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND ref_id=?");
 
   const result = users.map(u => {
     const parts = u.birth_date.split("-");
@@ -54,19 +58,59 @@ router.get("/birthdays", requireAuth, (req, res) => {
     const mmdd = `${m}-${d}`;
     const month = parseInt(m, 10);
     const day   = parseInt(d, 10);
-    const thisYear = new Date(today.getFullYear(), month - 1, day);
+    const thisYear = new Date(Date.UTC(today.getUTCFullYear(), month - 1, day));
     const nextBday = thisYear < today
-      ? new Date(today.getFullYear() + 1, month - 1, day)
+      ? new Date(Date.UTC(today.getUTCFullYear() + 1, month - 1, day))
       : thisYear;
     const daysUntil = Math.ceil((nextBday - today) / 86400000);
+    const isToday = mmdd === todayMMDD;
     return {
       id: u.id, fullName: u.full_name, username: u.username, dept: u.dept,
       birthDate: u.birth_date, month, day, mmdd,
-      isToday: mmdd === todayMMDD, daysUntil,
+      isToday, daysUntil,
+      congratulated: isToday
+        ? !!wishExists.get(u.id, `bday_wish_${req.user.id}_${u.id}_${todayStr}`)
+        : false,
     };
   }).filter(Boolean).sort((a, b) => a.daysUntil - b.daysUntil);
 
   return res.json(result);
+});
+
+// POST /api/users/:id/congratulate — envia parabéns ao aniversariante do dia
+router.post("/:id/congratulate", requireAuth, (req, res) => {
+  const db = getDb();
+  const targetId = req.params.id;
+  if (targetId === req.user.id) {
+    return res.status(400).json({ error: "Você não pode parabenizar a si mesmo" });
+  }
+
+  const target = db.prepare(
+    "SELECT id, full_name, birth_date FROM users WHERE id=? AND active=1"
+  ).get(targetId);
+  if (!target || !target.birth_date) {
+    return res.status(404).json({ error: "Usuário não encontrado" });
+  }
+
+  const todayLocal = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  if (target.birth_date.slice(5) !== todayLocal.slice(5)) {
+    return res.status(400).json({ error: "Hoje não é aniversário deste colega" });
+  }
+
+  const sender = db.prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id);
+  const refId = `bday_wish_${req.user.id}_${targetId}_${todayLocal}`;
+  const inserted = db.prepare(`
+    INSERT INTO notifications (id, user_id, type, ref_id, title, body)
+    SELECT ?, ?, 'birthday_wish', ?, ?, ?
+    WHERE NOT EXISTS (SELECT 1 FROM notifications WHERE user_id=? AND ref_id=?)
+  `).run(
+    uuidv4(), targetId, refId,
+    `🎉 ${sender.full_name} te desejou feliz aniversário!`,
+    `${sender.full_name} passou para te desejar um feliz aniversário! 🎂`,
+    targetId, refId
+  );
+
+  return res.json({ ok: true, already: inserted.changes === 0 });
 });
 
 // GET /api/users

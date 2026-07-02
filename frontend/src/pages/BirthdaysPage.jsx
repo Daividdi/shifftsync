@@ -16,15 +16,23 @@ function firstDayOfMonth(year, month) { return new Date(year, month, 1).getDay()
 
 export default function BirthdaysPage() {
   const { theme: T } = useTheme();
+  const { user } = useAuth();
   const now = new Date();
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewYear]  = useState(now.getFullYear());
   const [birthdays, setBirthdays] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedDay, setSelectedDay] = useState(null);
+  const [wished, setWished] = useState({});
 
   const fetchBirthdays = useCallback(async () => {
     try { const { data } = await api.get("/users/birthdays"); setBirthdays(data || []); } catch (_) {}
+  }, []);
+
+  const sendWish = useCallback(async (id) => {
+    setWished(w => ({ ...w, [id]: true }));
+    try { await api.post(`/users/${id}/congratulate`); }
+    catch (_) { setWished(w => ({ ...w, [id]: false })); }
   }, []);
 
   useEffect(() => { fetchBirthdays(); }, [fetchBirthdays]);
@@ -97,13 +105,33 @@ export default function BirthdaysPage() {
               ANIVERSÁRIO HOJE!
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              {todayBirthdays.map(b => (
-                <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.22)", borderRadius: 20, padding: "5px 14px 5px 6px" }}>
-                  <Avatar name={b.fullName} size={26} color="#fff" />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.fullName}</span>
-                  {b.dept && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }}>· {b.dept}</span>}
-                </div>
-              ))}
+              {todayBirthdays.map(b => {
+                const isMe = b.id === user?.id;
+                const sent = b.congratulated || wished[b.id];
+                return (
+                  <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.22)", borderRadius: 20, padding: "5px 6px 5px 6px" }}>
+                    <Avatar name={b.fullName} size={26} color="#fff" />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{b.fullName}</span>
+                    {b.dept && <span style={{ fontSize: 11, color: "rgba(255,255,255,0.75)" }}>· {b.dept}</span>}
+                    {!isMe && (
+                      <button
+                        onClick={() => !sent && sendWish(b.id)}
+                        disabled={sent}
+                        style={{
+                          border: "none", borderRadius: 14, padding: "4px 12px",
+                          fontSize: 11.5, fontWeight: 700, marginLeft: 4,
+                          cursor: sent ? "default" : "pointer",
+                          background: sent ? "rgba(255,255,255,0.35)" : "#fff",
+                          color: sent ? "#fff" : "#EC4899",
+                          transition: "background 0.15s, color 0.15s",
+                        }}
+                      >
+                        {sent ? "Parabéns enviado ✓" : "Parabenizar 🎉"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

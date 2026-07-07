@@ -472,7 +472,8 @@ router.get("/banco-horas", requireAuth, (req, res) => {
     FROM abono_requests
     WHERE user_id=? AND status='approved'
       AND COALESCE(punch_date_to, punch_date) >= ? AND punch_date <= ?
-  `).all(userId, effectiveFrom, to);
+  `).all(userId, periodStart, to);   // from periodStart: sumBalance (previous
+  // balance) also needs abonos that predate the current view range
   function abonoMinutesForDate(date) {
     let total = 0;
     for (const ab of abonosApproved) {
@@ -580,7 +581,10 @@ router.get("/banco-horas", requireAuth, (req, res) => {
     if (fromDate && toDate) {
       const cur = new Date(fromDate + "T12:00:00Z");
       const end = new Date(toDate   + "T12:00:00Z");
-      while (cur <= end) {
+      // toDate is EXCLUSIVE: it is the first day of the current view range —
+      // counting it here (always as falta, since its batidas are excluded by the
+      // prev queries) double-counted day 1 and broke the month-to-month carryover.
+      while (cur < end) {
         const dw = cur.getUTCDay();
         if (dw >= 1 && dw <= 6) dates.add(cur.toISOString().slice(0, 10));
         cur.setUTCDate(cur.getUTCDate() + 1);
@@ -612,7 +616,22 @@ router.get("/banco-horas", requireAuth, (req, res) => {
             total += -falta + adjM;
           } else total += adjM;
         } else {
-          total += computeDayDev(dayBs, exp, false, userSchedStart).balance;
+          // Mirror the period pipeline: meio_periodo non-Designer gets dynamic
+          // expected (4 punches = full day, 2 = half) + afternoon-shift start.
+          // Without this the previous-balance diverged for meio_periodo users.
+          let dayExpected = exp;
+          let dayStart = userSchedStart;
+          if (meioPeriodoUser?.meio_periodo) {
+            const _t = (meioPeriodoUser.title || '').toLowerCase();
+            const _isDesigner = _t.includes('designer') && !_t.includes('doctor');
+            if (!_isDesigner) dayExpected = dayBs.length >= 4 ? 480 : 240;
+            if (dayBs.length === 2 || dayBs.length === 4) {
+              const _firstMs = Math.min(...dayBs.map(b => b.time_millis));
+              const _firstMin = new Date(_firstMs).getUTCHours() * 60 + new Date(_firstMs).getUTCMinutes();
+              if (_firstMin >= 720) dayStart = 780; // 13:00 afternoon shift
+            }
+          }
+          total += computeDayDev(dayBs, dayExpected, false, dayStart).balance;
           total += adjM;
         }
       }

@@ -5,8 +5,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
 
-const STATUS_COLOR_KEY = { pending: "amber", approved: "green", rejected: "red" };
-const STATUS_LABEL     = { pending: "PENDENTE", approved: "APROVADO", rejected: "REJEITADO" };
+const STATUS_COLOR_KEY = { pending: "amber", approved: "green", rejected: "red", cancelled: "t8" };
+const STATUS_LABEL     = { pending: "PENDENTE", approved: "APROVADO", rejected: "REJEITADO", cancelled: "CANCELADO" };
 
 function toISODate(dateString) {
   const d = new Date(dateString);
@@ -60,6 +60,21 @@ export default function SwapRequests() {
   const handleSwapAction = async (swapId, action) => {
     try {
       await api.patch(`/swaps/${swapId}`, { action });
+      fetchAll();
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteSwap = async (sw) => {
+    const isFuture = sw.date >= new Date().toISOString().slice(0, 10) || (sw.coverCompDate && sw.coverCompDate >= new Date().toISOString().slice(0, 10));
+    const msg = sw.status === "approved"
+      ? `Excluir esta troca aprovada?${isFuture ? " As escalas das datas futuras voltam ao estado original." : ""}`
+      : "Excluir este pedido de troca?";
+    if (!window.confirm(msg)) return;
+    try {
+      await api.delete(`/swaps/${sw.id}`);
+      setFlash("Troca excluída — escala restaurada.");
       fetchAll();
     } catch(e) {
       console.error(e);
@@ -252,7 +267,7 @@ export default function SwapRequests() {
 
       {/* Resumo status */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        {["pending","approved","rejected"].map((s) => (
+        {["pending","approved","rejected","cancelled"].map((s) => (
           <div key={s} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: T.bgCard, border: `1px solid ${sc(s)}44`, borderRadius: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: sc(s) }} />
             <span style={{ fontSize: 12, color: T.t6 }}>{STATUS_LABEL[s]}</span>
@@ -362,6 +377,12 @@ export default function SwapRequests() {
                           ✕ Rejeitar
                         </button>
                       </div>
+                    )}
+                    {(isHR || sw.createdBy === user?.id || sw.requesterId === user?.id) && ["pending","approved"].includes(sw.status) && (
+                      <button onClick={(e)=>{ e.stopPropagation(); handleDeleteSwap(sw); }}
+                        style={{ width:"100%", padding:"8px 0", marginTop:8, background:"transparent", border:`1px dashed ${T.red}55`, borderRadius:8, color:T.red, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Sora',sans-serif" }}>
+                        🗑 Excluir troca{sw.status === "approved" ? " (restaura a escala)" : ""}
+                      </button>
                     )}
                   </div>
                 )}

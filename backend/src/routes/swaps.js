@@ -208,6 +208,37 @@ router.patch("/:id", requireAuth, requireRole("hr"), (req, res) => {
   return res.json(formatSwap(db.prepare("SELECT * FROM swap_requests WHERE id = ?").get(swap.id)));
 });
 
+// DELETE /api/swaps/:id — cancela uma troca (pendente ou aprovada).
+// Aprovadas: reverte a escala APENAS em datas futuras (o passado é histórico);
+// o registro vira status='cancelled' (mantém auditoria e o /auto não reaplica).
+router.delete("/:id", requireAuth, (req, res) => {
+  const db = getDb();
+  const swap = db.prepare("SELECT * FROM swap_requests WHERE id = ?").get(req.params.id);
+  if (!swap) return res.status(404).json({ error: "Pedido não encontrado" });
+  const isOwner = req.user.id === swap.requester_id || req.user.id === swap.created_by;
+  if (!isAdmin(req.user.role) && !isOwner) return res.status(403).json({ error: "Sem permissão" });
+  if (!["pending", "approved"].includes(swap.status)) return res.status(400).json({ error: "Este pedido não pode mais ser excluído" });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tx = db.transaction(() => {
+    if (swap.status === "approved") {
+      const covGm = db.prepare("SELECT group_id FROM group_members WHERE user_id = ? LIMIT 1").get(swap.coverer_id);
+      const covGroupId = covGm?.group_id || swap.group_id;
+      if (swap.date >= today) {
+        db.prepare("UPDATE schedules SET status='working' WHERE user_id=? AND date=? AND group_id=?").run(swap.requester_id, swap.date, swap.group_id);
+        db.prepare("UPDATE schedules SET status='off' WHERE user_id=? AND date=? AND group_id=?").run(swap.coverer_id, swap.date, covGroupId);
+      }
+      if (swap.cover_comp_date && swap.cover_comp_date >= today) {
+        db.prepare("UPDATE schedules SET status='working' WHERE user_id=? AND date=? AND group_id=?").run(swap.coverer_id, swap.cover_comp_date, covGroupId);
+        db.prepare("UPDATE schedules SET status='off' WHERE user_id=? AND date=? AND group_id=?").run(swap.requester_id, swap.cover_comp_date, swap.group_id);
+      }
+    }
+    db.prepare("UPDATE swap_requests SET status='cancelled', reviewed_by=?, reviewed_at=datetime('now') WHERE id=?").run(req.user.id, swap.id);
+  });
+  tx();
+  return res.json({ ok: true, status: "cancelled" });
+});
+
 function formatSwap(s) {
   return {
     id: s.id, requesterId: s.requester_id, covererId: s.coverer_id,

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Gauge } from "lucide-react";
+import { Gauge, UsersThree, Target, Star, Warning } from "@phosphor-icons/react";
+import { Num, Ring, Spark, InfoTip, DataStrip } from "../components/Kit";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
 
@@ -32,15 +33,32 @@ function BarChart({ data, T, onBar, sel }) {
   const ty = PYT + (1 - 100 / max) * ch;
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
+      <defs>
+        <linearGradient id="wfbarOk" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.accent} /><stop offset="100%" stopColor={T.accent} stopOpacity="0.4" />
+        </linearGradient>
+        <linearGradient id="wfbarLow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.t8} /><stop offset="100%" stopColor={T.t8} stopOpacity="0.35" />
+        </linearGradient>
+      </defs>
       {[0, .25, .5, .75, 1].map(f => { const y = PYT + (1 - f) * ch; return <line key={f} x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} />; })}
-      <line x1={PX} y1={ty} x2={W - PX} y2={ty} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
+      <line x1={PX} y1={ty} x2={W - PX} y2={ty} stroke={T.green} strokeOpacity="0.5" strokeDasharray="5 4" strokeWidth="1.2" />
       {data.map(([day, pct], i) => {
         const x = PX + i * cw + (cw - bw) / 2, h = Math.max((pct / max) * ch, 2), y = H - PYB - h;
-        const col = pct >= 100 ? T.accent : T.t8;
+        const ok = pct >= 100;
         return <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} onClick={() => onBar && onBar(i)} style={{ cursor: "pointer" }}>
           <rect x={PX + i * cw} y={PYT} width={cw} height={ch} fill="transparent" />
-          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3" fill={col} stroke={sel === i ? T.t1 : "none"} strokeWidth={sel === i ? 1.6 : 0} opacity={hi != null && hi !== i ? 0.5 : 1} />
-          <text x={(x + bw / 2).toFixed(1)} y={(y - 4).toFixed(1)} textAnchor="middle" fontSize="9" fill={T.t2}>{pct}</text>
+          <rect x={x.toFixed(1)} y={y.toFixed(1)} width={bw} height={h.toFixed(1)} rx="3.5"
+            fill={ok ? "url(#wfbarOk)" : "url(#wfbarLow)"}
+            stroke={sel === i ? T.t1 : "none"} strokeWidth={sel === i ? 1.6 : 0}
+            opacity={hi != null && hi !== i ? 0.45 : 1}
+            style={{
+              transition: "opacity .15s ease, filter .15s ease",
+              filter: hi === i ? `drop-shadow(0 0 6px ${(ok ? T.accent : T.t8)}77)` : "none",
+              transformOrigin: "bottom", transformBox: "fill-box",
+              animation: "wfBarGrow .5s cubic-bezier(0.2, 0, 0, 1) both", animationDelay: `${Math.min(i * 30, 600)}ms`,
+            }} />
+          <text x={(x + bw / 2).toFixed(1)} y={(y - 4).toFixed(1)} textAnchor="middle" fontSize="9" fill={T.t2} style={{ fontVariantNumeric: "tabular-nums" }}>{pct}</text>
           <text x={(x + bw / 2).toFixed(1)} y={H - 8} textAnchor="middle" fontSize="9" fill={T.t6}>{day}</text>
         </g>;
       })}
@@ -59,14 +77,20 @@ function LineChart({ data, T }) {
   const path = data.map(([, s], i) => `${i ? "L" : "M"}${(PX + i * cw).toFixed(1)},${Y(s).toFixed(1)}`).join(" ");
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
+      <defs>
+        <linearGradient id="wfareaQ" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={T.amber} stopOpacity="0.28" /><stop offset="100%" stopColor={T.amber} stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {_ticks.map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
-      <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeDasharray="5 4" strokeWidth="1.5" />
+      <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeOpacity="0.5" strokeDasharray="5 4" strokeWidth="1.2" />
+      {n > 1 && <path d={`${path} L${(PX + (n - 1) * cw).toFixed(1)},${H - PYB} L${PX},${H - PYB} Z`} fill="url(#wfareaQ)" stroke="none" />}
       <path d={path} fill="none" stroke={T.amber} strokeWidth="2.5" strokeLinejoin="round" />
       {hi != null && data[hi] && <line x1={PX + hi * cw} y1={PYT} x2={PX + hi * cw} y2={H - PYB} stroke={T.amber} strokeOpacity="0.35" strokeWidth="1" />}
       {data.map(([date, s], i) => (
         <g key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} style={{ cursor: "pointer" }}>
           <rect x={(PX + i * cw - (cw || 14) / 2).toFixed(1)} y={PYT} width={cw || 14} height={ch} fill="transparent" />
-          <circle cx={(PX + i * cw).toFixed(1)} cy={Y(s).toFixed(1)} r={hi === i ? 5 : 3.4} fill={T.bgCard} stroke={T.amber} strokeWidth="2" />
+          <circle cx={(PX + i * cw).toFixed(1)} cy={Y(s).toFixed(1)} r={hi === i ? 5 : 3.4} fill={T.bgCard} stroke={T.amber} strokeWidth="2" style={{ transition: "r .15s ease, filter .15s ease", filter: hi === i ? `drop-shadow(0 0 5px ${T.amber}99)` : "none" }} />
         </g>
       ))}
       {hi != null && data[hi] && <ChartTip W={W} PX={PX} x={PX + hi * cw} y={Math.max(2, Y(data[hi][1]) - 22)} text={`${data[hi][0]} · nota ${fmt(data[hi][1], 2)}`} T={T} />}
@@ -115,6 +139,7 @@ export default function PersonalIndicatorsPage() {
   const [teamGroup, setTeamGroup] = useState("ALL");
   const [teamGran, setTeamGran] = useState("month"); // month | week
   const [teamSort, setTeamSort] = useState({ k: "pct", dir: -1 });
+  const [hovRow, setHovRow] = useState(null);
   const [teamMonths, setTeamMonths] = useState(1);   // 1 | 3 | 6 | 12 (período de avaliação)
 
   useEffect(() => {
@@ -196,16 +221,24 @@ export default function PersonalIndicatorsPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 14 }}>
-        {[["👥 Colaboradores", n, T.t1, teamGroup === "ALL" ? `${groups.length} times` : grpShort(teamGroup)],
-          ["🎯 Atingimento médio", fmt(mAtt) + "%", mAtt >= 100 ? T.green : T.amber, `${acima} de ${n} acima da meta`],
-          ["⭐ Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "nota média dos médicos (0–10)"],
-          ["⚠️ Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo de 80% da meta, ou qualidade <6"]].map(([l, v, c, f], i) => (
-          <div key={i} style={card}><div style={h3}>{l}</div><div style={{ fontSize: 30, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 11, color: T.t6, marginTop: 7 }}>{f}</div></div>
+      <div className="wf-in" style={{ animationDelay: "70ms", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 14 }}>
+        {[[UsersThree, T.purple, "Colaboradores", n, T.t1, teamGroup === "ALL" ? `${groups.length} times` : grpShort(teamGroup)],
+          [Target, T.accent, "Atingimento médio", fmt(mAtt) + "%", mAtt >= 100 ? T.green : T.amber, `${acima} de ${n} acima da meta`],
+          [Star, T.amber, "Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "nota média dos médicos (0–10)"],
+          [Warning, aten > 0 ? T.red : T.green, "Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo de 80% da meta, ou qualidade <6"]].map(([Icon, clr, l, v, c, f], i) => (
+          <div key={i} className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
+            <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${clr}, transparent)` }} />
+            <div style={{ ...h3, alignItems: "center" }}>
+              <span style={{ display: "inline-flex", width: 26, height: 26, borderRadius: 8, alignItems: "center", justifyContent: "center", background: clr + "1c", color: clr, flexShrink: 0 }}><Icon size={16} weight="duotone" /></span>
+              {l}
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+            <div style={{ fontSize: 11, color: T.t6, marginTop: 7 }}>{f}</div>
+          </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+      <div className="wf-in" style={{ animationDelay: "140ms", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}>
           <div style={h3}><span style={dot(T.green)} />Maiores variações vs período anterior</div>
           <div style={{ fontSize: 11, color: T.t9, marginTop: -2, marginBottom: 9 }}>Variação do atingimento (% da meta) — quem mais subiu ou caiu, em pontos (p.p.)</div>
@@ -226,7 +259,7 @@ export default function PersonalIndicatorsPage() {
             {buckets.map((b, i) => (
               <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: T.t1 }}>{b.n}</div>
-                <div style={{ width: "100%", maxWidth: 42, height: Math.round(b.n / maxBucket * 72) + 4, borderRadius: "5px 5px 0 0", background: i < 2 ? T.red : i === 2 ? T.amber : T.green }} />
+                <div style={{ width: "100%", maxWidth: 42, height: Math.round(b.n / maxBucket * 72) + 4, borderRadius: "5px 5px 0 0", background: `linear-gradient(180deg, ${i < 2 ? T.red : i === 2 ? T.amber : T.green}, ${(i < 2 ? T.red : i === 2 ? T.amber : T.green)}55)`, transition: "height .25s ease" }} />
                 <div style={{ fontSize: 10, color: T.t6, whiteSpace: "nowrap" }}>{b.lab}</div>
               </div>
             ))}
@@ -235,7 +268,7 @@ export default function PersonalIndicatorsPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+      <div className="wf-in" style={{ animationDelay: "210ms", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}><div style={h3}><span style={dot(T.accent)} />Evolução — atingimento ({teamGran === "month" ? "mês" : "semana"})</div>{prodSeries.length ? <BarChart data={prodSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
         <div style={card}><div style={h3}><span style={dot(T.amber)} />Evolução — qualidade ({teamGran === "month" ? "mês" : "semana"})</div>{qualSeries.length ? <LineChart data={qualSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
       </div>
@@ -248,7 +281,7 @@ export default function PersonalIndicatorsPage() {
         </div>
       </div> : null}
 
-      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+      <div className="wf-in" style={{ animationDelay: "280ms", ...card, padding: 0, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
           <div style={{ ...h3, margin: 0 }}><span style={dot(T.green)} />Ranking da equipe — clique para abrir o painel individual</div>
           <button onClick={exportCsv} style={{ background: T.bgDeep, border: `1px solid ${T.border}`, color: T.t2, borderRadius: 9, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>⬇ Exportar CSV</button>
@@ -262,8 +295,13 @@ export default function PersonalIndicatorsPage() {
             </tr></thead>
             <tbody>
               {sorted.map(p => { const warn = p.pct < 80 || p.lowRatePct >= 15; return (
-                <tr key={p.name} onClick={() => openPerson(p.name)} style={{ cursor: "pointer", background: warn ? T.red + "0c" : "transparent", borderBottom: `1px solid ${T.borderRow || T.border}` }}>
-                  <td style={{ padding: "10px 14px", fontWeight: 700, color: T.t1, whiteSpace: "nowrap" }}>{p.name}</td>
+                <tr key={p.name} onClick={() => openPerson(p.name)}
+                  onMouseEnter={() => setHovRow(p.name)} onMouseLeave={() => setHovRow(null)}
+                  style={{ cursor: "pointer", background: hovRow === p.name ? T.accent + "14" : warn ? T.red + "0c" : "transparent", borderBottom: `1px solid ${T.borderRow || T.border}`, transition: "background .12s ease" }}>
+                  <td style={{ padding: "10px 14px", fontWeight: 700, color: hovRow === p.name ? T.accent : T.t1, whiteSpace: "nowrap", transition: "color .12s ease" }}>
+                    {p.name}
+                    <span aria-hidden style={{ display: "inline-block", marginLeft: 6, fontSize: 11, opacity: hovRow === p.name ? 1 : 0, transform: hovRow === p.name ? "none" : "translateX(-3px)", transition: "opacity .15s ease, transform .15s ease", color: T.accent }}>↗</span>
+                  </td>
                   <td style={{ padding: "10px 14px" }}><span style={{ fontSize: 11, fontWeight: 700, color: T.t7 || T.t8, background: T.bgDeep, border: `1px solid ${T.border}`, padding: "2px 8px", borderRadius: 6 }}>{grpShort(p.grp)}</span></td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}>{p.pct == null ? <span style={{ color: T.t9 }} title="Sem meta de produtividade (revisor QC)">—</span> : <b style={{ color: p.pct >= 100 ? T.green : p.pct >= 80 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{p.pct}%</b>}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: T.t2, fontVariantNumeric: "tabular-nums" }}>{p.rank ? `${p.rank}º/${p.groupSize}` : "—"}</td>
@@ -285,7 +323,7 @@ export default function PersonalIndicatorsPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 14 }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
-            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={18} /></span>
+            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.accent + "1f", color: T.accent, flexShrink: 0 }}><Gauge size={20} weight="duotone" /></span>
             {mode === "team" ? "Visão do Time" : viewName ? "Indicadores do Colaborador" : "Indicadores Pessoais"}
           </h1>
           <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>{mode === "team" ? "Ranking, evolução e comparativos da equipe" : viewName ? "Painel detalhado de produtividade, qualidade e volume" : "Seus avanços, qualidade e volume — acompanhe e supere suas metas"}</p>
@@ -321,10 +359,19 @@ export default function PersonalIndicatorsPage() {
         </div>}
       </div>
 
+      <DataStrip T={T} />
+
       {mode === "team" && renderTeam()}
 
-      {mode === "individual" && state.loading && <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>
-        <div style={{ width: 36, height: 36, border: `3px solid ${T.border}`, borderTopColor: T.accent, borderRadius: "50%", margin: "0 auto 14px", animation: "spin .7s linear infinite" }} />Carregando seus indicadores…</div>}
+      {mode === "individual" && state.loading && <div>
+        <div className="wf-skel" style={{ height: 54, marginBottom: 14 }} />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
+          <div className="wf-skel" style={{ height: 170 }} /><div className="wf-skel" style={{ height: 170 }} /><div className="wf-skel" style={{ height: 170 }} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div className="wf-skel" style={{ height: 230 }} /><div className="wf-skel" style={{ height: 230 }} />
+        </div>
+      </div>}
 
       {mode === "individual" && state.error && <div style={{ textAlign: "center", padding: "60px 0", color: T.red }}>{state.error}</div>}
 
@@ -372,7 +419,7 @@ export default function PersonalIndicatorsPage() {
 
         return <>
           {/* Filtro de período */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
+          <div className="wf-in" style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", background: T.bgCard, border: `1px solid ${T.border}`, borderRadius: 12, padding: "10px 14px", marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: T.t7, textTransform: "uppercase" }}>Período</span>
               {(qualityOnly ? [["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]] : [["day", "Dia"], ["week", "Semana"], ["month", "Mês"], ["last3", "3 meses"], ["acc", "Acumulado"]]).map(([k, lab]) => (
@@ -390,7 +437,7 @@ export default function PersonalIndicatorsPage() {
           </div>
 
           {/* Insight */}
-          <div style={{ ...card, marginBottom: 14, borderLeft: `3px solid ${T.accent}`, display: "flex", gap: 14, alignItems: "center" }}>
+          <div className="wf-in" style={{ animationDelay: "20ms", ...card, marginBottom: 14, borderLeft: `3px solid ${T.accent}`, display: "flex", gap: 14, alignItems: "center" }}>
             <div style={{ fontSize: 24 }}>💡</div>
             <div style={{ fontSize: 12.5, color: T.t2, lineHeight: 1.55 }}>
               {qualityOnly
@@ -400,19 +447,47 @@ export default function PersonalIndicatorsPage() {
             </div>
           </div>
 
+          {/* Metas — anéis de progresso */}
+          {(() => {
+            const colOf = (pc) => pc == null ? T.t6 : pc >= 100 ? T.green : pc >= 80 ? T.amber : T.red;
+            const items = [
+              a && a.pct != null ? { pct: a.pct, label: "Produção", val: fmt(a.pct) + "%", unit: "da quota", tgt: "meta 100% da quota MTS" } : null,
+              q && q.score != null ? { pct: q.score / 8 * 100, label: "Qualidade", val: fmt(q.score, 2), unit: "/10", tgt: "meta 8,00" } : null,
+            ].filter(Boolean);
+            if (!items.length) return null;
+            return <div className="wf-in" style={{ animationDelay: "40ms", ...card, marginBottom: 14 }}>
+              <div style={h3}><span style={dot(T.green)} />Minhas metas<InfoTip text="Produção: meta = 100% da sua quota MTS (atingimento do período selecionado). Qualidade: meta = nota 8,0 dos médicos (0–10). O anel mostra quanto da meta foi alcançado." T={T} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 18 }}>
+                {items.map((it, i) => { const cc = colOf(it.pct); return (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
+                    <Ring pct={it.pct} valueLabel={it.val} unit={it.unit} color={cc} T={T} delay={i * 180} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: T.t1 }}>{it.label}</div>
+                      <div style={{ fontSize: 11.5, color: T.t6, marginTop: 3 }}>{it.tgt}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: cc, marginTop: 5, fontVariantNumeric: "tabular-nums" }}>{`${Math.round(it.pct)}% da meta`}</div>
+                    </div>
+                  </div>
+                ); })}
+              </div>
+            </div>;
+          })()}
+
           {/* KPIs */}
-          <div style={{ display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
-            {!qualityOnly && <div style={card}>
-              <div style={h3}><span style={dot(T.accent)} />Atingimento (% da meta)</div>
-              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.accent }}>{fmt(headPct)}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
+          <div className="wf-in" style={{ animationDelay: "70ms", display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
+            {!qualityOnly && <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
+              <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.accent}, transparent)` }} />
+              <div style={h3}><span style={dot(T.accent)} />Atingimento (% da meta)<InfoTip text="Casos concluídos ponderados (Novo = 1, Refinamento = 2/3, Modificação = 1/3) ÷ sua quota MTS. Fonte: warehouse oficial (Doris), atualizado automaticamente todo dia às 06:00. 100% = meta batida." T={T} /></div>
+              <div><Num value={headPct} style={{ fontSize: 38, fontWeight: 800, color: T.accent }} /><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 {granPt ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · {gran === "day" ? "dia" : "semana"}</span> : <>{a.deltaPct != null && <TrendPill dir={a.deltaPct > 0 ? "up" : a.deltaPct < 0 ? "down" : "flat"} label={`${a.deltaPct > 0 ? "+" : ""}${fmt(a.deltaPct)}%`} T={T} />} vs mês anterior · 100% = meta batida</>}
               </div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{granPt ? <>{fmt(granCases, 1)} casos · {granDays} {gran === "day" ? "dia" : "dias"}</> : <>{fmt(a.completed, 1)} casos · {a.days} dias</>}</div>
+              {((isL3 ? S.monthsSeries : d.monthly.monthsSeries) || []).length > 1 && <div style={{ marginTop: 8 }}><Spark data={(isL3 ? S.monthsSeries : d.monthly.monthsSeries) || []} color={T.accent} /></div>}
             </div>}
-            <div style={card}>
-              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota 0–10)</div>
-              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>{granQ ? fmt(granQ.score, 2) : (q ? fmt(q.score, 2) : "—")}</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
+            <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
+              <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.amber}, transparent)` }} />
+              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota 0–10)<InfoTip text="Nota dada pelos médicos aos seus casos (0–10) — a mesma régua do relatório oficial de satisfação. Meta: 8,0. Notas abaixo de 6 contam como 'notas baixas' (meta: menos de 15% das avaliações)." T={T} /></div>
+              <div>{granQ ? <Num value={granQ.score} decimals={2} style={{ fontSize: 38, fontWeight: 800, color: T.amber }} /> : (q ? <Num value={q.score} decimals={2} style={{ fontSize: 38, fontWeight: 800, color: T.amber }} /> : <span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>—</span>)}<span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                 {granQ ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · semana</span> : <>{q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0{granPt ? " · mês" : ""}</>}
               </div>
@@ -423,11 +498,13 @@ export default function PersonalIndicatorsPage() {
                   : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: T.t1 + "12", color: T.t3 }}>última nota baixa: {L.lastLowWeeksAgo === 0 ? "período atual" : L.lastLowWeeksAgo == null ? "nunca" : `${L.lastLowWeeksAgo} sem atrás`}</span>}
               </div>}
             </div>
-            {!qualityOnly && <div style={card}>
-              <div style={h3}><span style={dot(T.green)} />Posição no grupo</div>
-              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.green }}>{a.rank}º</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/{a.groupSize}</span></div>
+            {!qualityOnly && <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
+              <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.green}, transparent)` }} />
+              <div style={h3}><span style={dot(T.green)} />Posição no grupo<InfoTip text="Sua colocação por atingimento da meta entre os colaboradores do seu grupo no período." T={T} /></div>
+              <div><span style={{ fontSize: 38, fontWeight: 800, color: T.green, fontVariantNumeric: "tabular-nums" }}>{a.rank}º</span><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/{a.groupSize}</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2 }}>em produtividade · {d.group}{granPt ? " · mês" : ""}</div>
-              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{a.rank <= Math.ceil(a.groupSize * 0.2) ? "top 20% 🔥 mantenha o ritmo" : "subindo no ranking"}</div>
+              <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 800, color: a.rank <= Math.ceil(a.groupSize * 0.25) ? T.green : T.t4 }}>Top {Math.max(1, Math.ceil(a.rank / a.groupSize * 100))}% do grupo</div>
+              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 6 }}>{a.rank <= Math.ceil(a.groupSize * 0.2) ? "top 20% 🔥 mantenha o ritmo" : "subindo no ranking"}</div>
             </div>}
           </div>
 
@@ -467,7 +544,7 @@ export default function PersonalIndicatorsPage() {
               {qSource.map((w, i) => { const maxLow = Math.max(...qSource.map(x => x.low), 1); const hh = w.low > 0 ? Math.round(w.low / maxLow * 40) + 6 : 4; const top = (w.range || "").indexOf("–") >= 0 ? w.range.split("–")[0] : w.range;
                 return <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }} title={`${w.week ? w.week + " · " : ""}${w.range}: ${w.low} baixa(s) · nota ${w.score}`}>
                   <div style={{ fontSize: 10.5, fontWeight: 800, color: w.low > 0 ? T.red : T.t9, fontVariantNumeric: "tabular-nums" }}>{w.low}</div>
-                  <div style={{ width: "100%", maxWidth: 26, height: hh, borderRadius: "4px 4px 0 0", background: w.low > 0 ? T.red : T.t1 + "22" }} />
+                  <div style={{ width: "100%", maxWidth: 26, height: hh, borderRadius: "4px 4px 0 0", background: w.low > 0 ? `linear-gradient(180deg, ${T.red}, ${T.red}55)` : T.t1 + "22", transition: "height .25s ease" }} />
                   <div style={{ fontSize: 9, color: T.t9, whiteSpace: "nowrap" }}>{top}</div>
                 </div>;
               })}
@@ -495,7 +572,7 @@ export default function PersonalIndicatorsPage() {
                 const max = Math.max(S.cases.new, S.cases.mod, S.cases.ref, 1);
                 return <div key={lab} style={{ margin: "10px 0" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}><span style={{ color: T.t2 }}>{lab}</span><b style={{ color: T.t1 }}>{v}</b></div>
-                  <div style={{ height: 7, borderRadius: 99, background: T.t1 + "12", overflow: "hidden" }}><i style={{ display: "block", height: "100%", width: `${v / max * 100}%`, background: c, borderRadius: 99 }} /></div>
+                  <div style={{ height: 7, borderRadius: 99, background: T.t1 + "12", overflow: "hidden" }}><i style={{ display: "block", height: "100%", width: `${v / max * 100}%`, background: `linear-gradient(90deg, ${c}, ${c}99)`, borderRadius: 99, transition: "width .3s ease" }} /></div>
                 </div>;
               })}
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 12 }}>Total: {S.cases.new + S.cases.mod + S.cases.ref} casos · {monthName}</div>

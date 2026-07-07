@@ -479,4 +479,16 @@ router.get("/team-trend", requireAuth, (req, res) => {
   }
 });
 
+// Frescor dos dados — visível a todos (credibilidade começa em saber a data-base)
+router.get("/data-status", requireAuth, (req, res) => {
+  let d;
+  try { d = bi(); } catch (e) { return res.json([]); }
+  const one = (sql) => { try { return d.prepare(sql).get() || {}; } catch (e) { return {}; } };
+  res.json([
+    { key: "productivity", label: "Produtividade", cadence: "daily", auto: true, ...one("SELECT MAX(snapshot_date) last FROM productivity") },
+    { key: "quality_week", label: "Qualidade (semana)", cadence: "weekly", auto: false, ...one("SELECT MAX(snapshot_date) last FROM quality_designer WHERE period_type='week'") },
+    { key: "quality_month", label: "Qualidade (mês)", cadence: "monthly", auto: false, ...one("SELECT MAX(snapshot_date) last FROM quality_designer WHERE period_type='month'") },
+  ]);
+});
+
 module.exports = router;

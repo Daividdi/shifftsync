@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.7",
     "axios": "^1.6.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

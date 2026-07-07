@@ -29,7 +29,12 @@ import FocusGamePage from "./pages/FocusGamePage";
 import { GameTimerProvider } from "./context/GameTimerContext";
 import AbsenceAlert from "./components/AbsenceAlert";
 
-const S = ["* { box-sizing: border-box; } body { font-family: 'Sora', sans-serif; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-variant-numeric: tabular-nums; }",".mono { font-family: 'JetBrains Mono', monospace; }","h1,h2,h3 { text-wrap: balance; }","p { text-wrap: pretty; }","button:not([disabled]) { transition-property: transform; transition-duration: 150ms; transition-timing-function: ease-out; }","button:not([disabled]):active { transform: scale(0.96); }","@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }","@keyframes spin { to { transform: rotate(360deg); } }",".fade-up { animation: fadeUp 0.35s ease forwards; }"].join("\n");
+const S = ["* { box-sizing: border-box; } body { font-family: 'Sora', sans-serif; margin: 0; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-variant-numeric: tabular-nums; }",".mono { font-family: 'JetBrains Mono', monospace; }","h1,h2,h3 { text-wrap: balance; }","p { text-wrap: pretty; }","button:not([disabled]) { transition-property: transform; transition-duration: 150ms; transition-timing-function: ease-out; }","button:not([disabled]):active { transform: scale(0.96); }","@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }","@keyframes spin { to { transform: rotate(360deg); } }",".fade-up { animation: fadeUp 0.35s ease forwards; }",
+".wf-in { animation: fadeUp 0.35s cubic-bezier(0.2, 0, 0, 1) both; }",
+".wf-card { transition: transform .18s ease, box-shadow .18s ease; } .wf-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.16), 0 2px 10px rgba(0,0,0,.10); }",
+"@keyframes wfShimmer { from { background-position: -300px 0; } to { background-position: 300px 0; } } .wf-skel { border-radius: 12px; background: linear-gradient(90deg, rgba(127,127,127,.09) 25%, rgba(127,127,127,.20) 50%, rgba(127,127,127,.09) 75%); background-size: 600px 100%; animation: wfShimmer 1.15s linear infinite; }",
+"@keyframes wfRingFill { from { stroke-dashoffset: var(--wfc); } }",
+"@keyframes wfBarGrow { from { transform: scaleY(0); } to { transform: scaleY(1); } }"].join("\n");
 
 function AppContent() {
   const { user, loading } = useAuth();

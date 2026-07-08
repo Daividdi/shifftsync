@@ -362,7 +362,7 @@ export default function PontoSaldoPage() {
       const [batidasRes, usersRes, equipeRes] = await Promise.all([
         api.get(`/batidas?dateFrom=${dateFrom}&dateTo=${dateTo}`),
         api.get("/users"),
-        api.get("/ponto/banco-horas/equipe").catch(() => ({ data: [] })),
+        api.get(`/ponto/banco-horas/equipe?until=${dateFrom}`).catch(() => ({ data: [] })),
       ]);
       setDays(batidasRes.data);
       setUsersMap(new Map(usersRes.data.map(u => [u.id, u])));
@@ -488,12 +488,13 @@ export default function PontoSaldoPage() {
       u.daysList.sort((a, b) => a.date > b.date ? 1 : -1);
     }
     return [...byUser.values()].map(u => {
-      // Always use client-side totals so the balance reflects the selected date range,
-      // not the full periodo from bank start to today.
+      // Saldo do período = totais client-side do range selecionado; saldo
+      // anterior = acumulado do trimestre ANTES do range (backend, ?until=);
+      // saldo atual = anterior + período (acumulativo do trimestre).
       const extrasACompensarMin = u.totalExtrasMin - (u.totalPaidOTMin || 0);
       const faltasACompensarMin = u.totalAtrasoMin + u.totalSAMin + u.totalFaltaMin;
       const periodoSaldoMin     = u.correctedBalanceMin;
-      const saldoAnteriorMin    = 0;
+      const saldoAnteriorMin    = u.previousBalanceMin ?? 0;
       return {
         ...u,
         balanceMin: u.correctedBalanceMin,
@@ -501,7 +502,7 @@ export default function PontoSaldoPage() {
         faltasACompensarMin,
         periodoSaldoMin,
         saldoAnteriorMin,
-        saldoAtualMin: periodoSaldoMin,
+        saldoAtualMin: saldoAnteriorMin + periodoSaldoMin,
       };
     });
   }, [days, todayStr, usersMap]);

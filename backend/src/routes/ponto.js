@@ -862,6 +862,9 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
 
   const todayStr     = today();
   const yesterdayStr = yesterday();
+  // ?until=YYYY-MM-DD: além do saldo do período todo, devolve o saldo acumulado
+  // ANTES dessa data (previousBalanceMin) — a tela usa como "saldo anterior".
+  const untilStr = /^\d{4}-\d{2}-\d{2}$/.test(req.query.until || "") ? req.query.until : null;
 
   // Employees can call this endpoint but scoped to themselves only, so the PontoSaldoPage
   // shows correct schedStartMin / workingSaturdayDates / dailyExpByDow for their own view.
@@ -1020,7 +1023,8 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
       cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
-    let balance = 0, periodExtras = 0, periodAtraso = 0, periodSA = 0, periodFalta = 0, periodAbono = 0, periodPaidOT = 0;
+    let balance = 0, prevBalance = 0, periodExtras = 0, periodAtraso = 0, periodSA = 0, periodFalta = 0, periodAbono = 0, periodPaidOT = 0;
+    const add = (date, delta) => { balance += delta; if (untilStr && date < untilStr) prevBalance += delta; };
     for (const date of allDates) {
       const dayBs  = bByDate[date] || [];
       const dayAs  = aByDate[date] || [];
@@ -1030,8 +1034,8 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
       const isHol  = holidaySet.has(date);
       const adjMin = dayAs.reduce((s, a) => s + (a.tipo === "credito" ? a.minutos : -a.minutos), 0);
 
-      if (dow === 0 || isHol) { if (adjMin) { balance += adjMin; periodAbono += adjMin; } continue; }
-      if (userVacSet.has(date)) { if (adjMin) { balance += adjMin; periodAbono += adjMin; } continue; }
+      if (dow === 0 || isHol) { if (adjMin) { add(date, adjMin); periodAbono += adjMin; } continue; }
+      if (userVacSet.has(date)) { if (adjMin) { add(date, adjMin); periodAbono += adjMin; } continue; }
 
       if (isSat) {
         const exp = hasSched && daySched[6] !== undefined ? daySched[6] : 240;
@@ -1050,23 +1054,38 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
           periodAtraso += dev.atrasoMin;
           periodSA     += dev.saMin;
         }
-        balance += satBal + adjMin;
+        add(date, satBal + adjMin);
         if (adjMin) periodAbono += adjMin;
       } else {
         const exp = hasSched && daySched[dow] !== undefined ? daySched[dow] : dailyExp;
         if (dayBs.length > 0) {
-          const dev = computeDayDev(dayBs, exp, false, schedStart);
-          balance += dev.balance;
+          // Meio período (não-Designer): expediente dinâmico — 4 batidas = dia
+          // cheio (8h), 2 = meio (4h); turno da tarde inicia 13:00 (mesma regra
+          // do extrato individual, para os saldos baterem entre as telas).
+          let dayExp = exp;
+          let dayStart = schedStart;
+          if (u.meio_periodo) {
+            const _t = (u.title || "").toLowerCase();
+            const _isDesigner = _t.includes("designer") && !_t.includes("doctor");
+            if (!_isDesigner) dayExp = dayBs.length >= 4 ? 480 : 240;
+            if (dayBs.length === 2 || dayBs.length === 4) {
+              const _firstMs = Math.min(...dayBs.map(b => b.time_millis));
+              const _firstMin = new Date(_firstMs).getUTCHours() * 60 + new Date(_firstMs).getUTCMinutes();
+              if (_firstMin >= 720) dayStart = 780;
+            }
+          }
+          const dev = computeDayDev(dayBs, dayExp, false, dayStart);
+          add(date, dev.balance);
           periodExtras += dev.extraMin;
           periodPaidOT += dev.paidOTMin;
           periodAtraso += dev.atrasoMin;
           periodSA     += dev.saMin;
         } else if (withinEmp(date)) {
           const falta = Math.max(0, exp - abonoCoverForUserDate(u.id, date));
-          balance -= falta;
+          add(date, -falta);
           periodFalta += falta;
         }
-        balance += adjMin;
+        add(date, adjMin);
         if (adjMin) periodAbono += adjMin;
       }
     }
@@ -1100,7 +1119,7 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
       groupColor: u.group_color || "#94a3b8",
       schedStartMin: schedStart,
       periodBalanceMin: balance,
-      previousBalanceMin: 0,
+      previousBalanceMin: prevBalance,
       periodoStartDate: periodStart,
       // PDF-style per-event buckets
       periodExtrasMin: periodExtras,

@@ -615,7 +615,9 @@ router.get("/banco-horas", requireAuth, (req, res) => {
             total += -falta + adjM;
           } else total += adjM;
         } else {
-          total += computeDayDev(dayBs, exp, true, userSchedStart).balance + adjM;
+          let _b = computeDayDev(dayBs, exp, true, userSchedStart).balance;
+          if (_b < 0) _b += Math.min(abonoMinutesForDate(date), -_b);
+          total += _b + adjM;
         }
       } else {
         const exp = getEffectiveDayExpected(date, dailyExpected);
@@ -640,8 +642,9 @@ router.get("/banco-horas", requireAuth, (req, res) => {
               if (_firstMin >= 720) dayStart = 780; // 13:00 afternoon shift
             }
           }
-          total += computeDayDev(dayBs, dayExpected, false, dayStart).balance;
-          total += adjM;
+          let _b = computeDayDev(dayBs, dayExpected, false, dayStart).balance;
+          if (_b < 0) _b += Math.min(abonoMinutesForDate(date), -_b);
+          total += _b + adjM;
         }
       }
     }
@@ -710,6 +713,12 @@ router.get("/banco-horas", requireAuth, (req, res) => {
       } else {
         const dev = computeDayDev(dayBatidas, expectedMin, true, userSchedStart);
         workedMin = dev.worked; diffMin = dev.balance; atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
+        if (_abonoCover > 0 && diffMin < 0) {
+          const cover = Math.min(_abonoCover, -diffMin);
+          diffMin += cover;
+          const c1 = Math.min(saMin, cover); saMin -= c1;
+          const c2 = Math.min(atrasoMin, cover - c1); atrasoMin -= c2;
+        }
       }
     } else if (!isSat && dow !== 0 && !isHoliday) {
       expectedMin = getEffectiveDayExpected(date, dailyExpected);
@@ -744,6 +753,14 @@ router.get("/banco-horas", requireAuth, (req, res) => {
         const dev = computeDayDev(dayBatidas, dayExpected, false, daySchedStart);
         workedMin = dev.worked; diffMin = dev.balance; lunchMin = dev.lunchMin; expectedMin = dayExpected;
         atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
+        // Abono (atestado etc.) neutraliza o que faltou no dia — como no ERP:
+        // cobre até o gap, nunca gera crédito; abate primeiro SA, depois atraso.
+        if (_abonoCover > 0 && diffMin < 0) {
+          const cover = Math.min(_abonoCover, -diffMin);
+          diffMin += cover;
+          const c1 = Math.min(saMin, cover); saMin -= c1;
+          const c2 = Math.min(atrasoMin, cover - c1); atrasoMin -= c2;
+        }
       }
     } else {
       const dev = computeDayDev(dayBatidas, 0, isSat, userSchedStart);
@@ -1074,10 +1091,17 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
         } else {
           const dev = computeDayDev(dayBs, exp, true, schedStart);
           satBal = dev.balance;
+          let sAtr = dev.atrasoMin, sSA = dev.saMin;
+          if (satBal < 0) {
+            const cover = Math.min(abonoCoverForUserDate(u.id, date), -satBal);
+            satBal += cover;
+            const c1 = Math.min(sSA, cover); sSA -= c1;
+            sAtr -= Math.min(sAtr, cover - c1);
+          }
           periodExtras += dev.extraMin;
           periodPaidOT += dev.paidOTMin;
-          periodAtraso += dev.atrasoMin;
-          periodSA     += dev.saMin;
+          periodAtraso += sAtr;
+          periodSA     += sSA;
         }
         add(date, satBal + adjMin);
         if (adjMin) periodAbono += adjMin;
@@ -1100,11 +1124,18 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
             }
           }
           const dev = computeDayDev(dayBs, dayExp, false, dayStart);
-          add(date, dev.balance);
+          let dBal = dev.balance, dAtr = dev.atrasoMin, dSA = dev.saMin;
+          if (dBal < 0) {
+            const cover = Math.min(abonoCoverForUserDate(u.id, date), -dBal);
+            dBal += cover;
+            const c1 = Math.min(dSA, cover); dSA -= c1;
+            dAtr -= Math.min(dAtr, cover - c1);
+          }
+          add(date, dBal);
           periodExtras += dev.extraMin;
           periodPaidOT += dev.paidOTMin;
-          periodAtraso += dev.atrasoMin;
-          periodSA     += dev.saMin;
+          periodAtraso += dAtr;
+          periodSA     += dSA;
         } else if (withinEmp(date)) {
           const falta = Math.max(0, exp - abonoCoverForUserDate(u.id, date));
           add(date, -falta);

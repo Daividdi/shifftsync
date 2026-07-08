@@ -83,7 +83,7 @@ function LineChart({ data, T }) {
         </linearGradient>
       </defs>
       {_ticks.map(v => { const y = Y(v); return <g key={v}><line x1={PX} y1={y} x2={W - PX} y2={y} stroke={T.chartGrid} /><text x={PX - 6} y={y + 3} textAnchor="end" fontSize="9" fill={T.t6}>{v}</text></g>; })}
-      <line x1={PX} y1={Y(8)} x2={W - PX} y2={Y(8)} stroke={T.green} strokeOpacity="0.5" strokeDasharray="5 4" strokeWidth="1.2" />
+      <line x1={PX} y1={Y(8.3)} x2={W - PX} y2={Y(8.3)} stroke={T.green} strokeOpacity="0.5" strokeDasharray="5 4" strokeWidth="1.2" />
       {n > 1 && <path d={`${path} L${(PX + (n - 1) * cw).toFixed(1)},${H - PYB} L${PX},${H - PYB} Z`} fill="url(#wfareaQ)" stroke="none" />}
       <path d={path} fill="none" stroke={T.amber} strokeWidth="2.5" strokeLinejoin="round" />
       {hi != null && data[hi] && <line x1={PX + hi * cw} y1={PYT} x2={PX + hi * cw} y2={H - PYB} stroke={T.amber} strokeOpacity="0.35" strokeWidth="1" />}
@@ -224,7 +224,7 @@ export default function PersonalIndicatorsPage() {
       <div className="wf-in" style={{ animationDelay: "70ms", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 14, marginBottom: 14 }}>
         {[[UsersThree, T.purple, "Colaboradores", n, T.t1, teamGroup === "ALL" ? `${groups.length} times` : grpShort(teamGroup)],
           [Target, T.accent, "Atingimento médio", fmt(mAtt) + "%", mAtt >= 100 ? T.green : T.amber, `${acima} de ${n} acima da meta`],
-          [Star, T.amber, "Qualidade média", fmt(mQ, 2), mQ >= 8 ? T.green : T.amber, "nota média dos médicos (0–10)"],
+          [Star, T.amber, "Qualidade média", fmt(mQ, 2), mQ >= 8.3 ? T.green : T.amber, "nota média dos médicos (0–10)"],
           [Warning, aten > 0 ? T.red : T.green, "Precisam de atenção", aten, aten > 0 ? T.red : T.green, "abaixo de 80% da meta, ou qualidade <6"]].map(([Icon, clr, l, v, c, f], i) => (
           <div key={i} className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
             <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${clr}, transparent)` }} />
@@ -305,7 +305,7 @@ export default function PersonalIndicatorsPage() {
                   <td style={{ padding: "10px 14px" }}><span style={{ fontSize: 11, fontWeight: 700, color: T.t7 || T.t8, background: T.bgDeep, border: `1px solid ${T.border}`, padding: "2px 8px", borderRadius: 6 }}>{grpShort(p.grp)}</span></td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}>{p.pct == null ? <span style={{ color: T.t9 }} title="Sem meta de produtividade (revisor QC)">—</span> : <b style={{ color: p.pct >= 100 ? T.green : p.pct >= 80 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{p.pct}%</b>}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: T.t2, fontVariantNumeric: "tabular-nums" }}>{p.rank ? `${p.rank}º/${p.groupSize}` : "—"}</td>
-                  <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.score >= 8 ? T.green : T.amber, fontVariantNumeric: "tabular-nums" }}>{p.score != null ? fmt(p.score, 2) : "—"}</b></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.score >= 8.3 ? T.green : T.amber, fontVariantNumeric: "tabular-nums" }}>{p.score != null ? fmt(p.score, 2) : "—"}</b></td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: p.lowRatePct >= 15 ? T.red : p.lowRatePct > 0 ? T.amber : T.t8, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(p.lowRatePct, 1)}% <span style={{ color: T.t9, fontWeight: 400 }}>({p.lowTotal})</span></td>
                 </tr>
               ); })}
@@ -452,11 +452,11 @@ export default function PersonalIndicatorsPage() {
             const colOf = (pc) => pc == null ? T.t6 : pc >= 100 ? T.green : pc >= 80 ? T.amber : T.red;
             const items = [
               a && a.pct != null ? { pct: a.pct, label: "Produção", val: fmt(a.pct) + "%", unit: "da quota", tgt: "meta 100% da quota MTS" } : null,
-              q && q.score != null ? { pct: q.score / 8 * 100, label: "Qualidade", val: fmt(q.score, 2), unit: "/10", tgt: "meta 8,00" } : null,
+              q && q.score != null ? { pct: q.score / 8.3 * 100, label: "Qualidade", val: fmt(q.score, 2), unit: "/10", tgt: "meta 8,30" } : null,
             ].filter(Boolean);
             if (!items.length) return null;
             return <div className="wf-in" style={{ animationDelay: "40ms", ...card, marginBottom: 14 }}>
-              <div style={h3}><span style={dot(T.green)} />Minhas metas<InfoTip text="Produção: meta = 100% da sua quota MTS (atingimento do período selecionado). Qualidade: meta = nota 8,0 dos médicos (0–10). O anel mostra quanto da meta foi alcançado." T={T} /></div>
+              <div style={h3}><span style={dot(T.green)} />Minhas metas<InfoTip text="Produção: meta = 100% da sua quota MTS (atingimento do período selecionado). Qualidade: meta = nota 8,3 dos médicos (0–10), o benchmark do centro. O anel mostra quanto da meta foi alcançado." T={T} /></div>
               <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 18 }}>
                 {items.map((it, i) => { const cc = colOf(it.pct); return (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
@@ -486,10 +486,10 @@ export default function PersonalIndicatorsPage() {
             </div>}
             <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
               <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.amber}, transparent)` }} />
-              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota 0–10)<InfoTip text="Nota dada pelos médicos aos seus casos (0–10) — a mesma régua do relatório oficial de satisfação. Meta: 8,0. Notas abaixo de 6 contam como 'notas baixas' (meta: menos de 15% das avaliações)." T={T} /></div>
+              <div style={h3}><span style={dot(T.amber)} />Qualidade (nota 0–10)<InfoTip text="Nota dada pelos médicos aos seus casos (0–10) — a mesma régua do relatório oficial de satisfação. Meta: 8,3 (benchmark do centro). Notas abaixo de 6 contam como 'notas baixas' (meta: menos de 15% das avaliações)." T={T} /></div>
               <div>{granQ ? <Num value={granQ.score} decimals={2} style={{ fontSize: 38, fontWeight: 800, color: T.amber }} /> : (q ? <Num value={q.score} decimals={2} style={{ fontSize: 38, fontWeight: 800, color: T.amber }} /> : <span style={{ fontSize: 38, fontWeight: 800, color: T.amber }}>—</span>)}<span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>/10</span></div>
               <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
-                {granQ ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · semana</span> : <>{q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,0{granPt ? " · mês" : ""}</>}
+                {granQ ? <span style={{ color: T.t4, fontWeight: 600 }}>{granPt[0]} · semana</span> : <>{q && q.delta != null && <TrendPill dir={q.delta > 0 ? "up" : q.delta < 0 ? "down" : "flat"} label={`${q.delta > 0 ? "+" : ""}${fmt(q.delta, 2)}`} T={T} />} meta 8,3{granPt ? " · mês" : ""}</>}
               </div>
               <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>{granQ ? `${granQ.qty} avaliações · ${(granQ.qty ? (granQ.low / granQ.qty * 100).toFixed(1) : "0")}% baixas <6 (${granQ.low})` : (q ? `${q.qty} avaliações · ${fmt(L.lowRatePct, 1)}% baixas <6 (${L.total})` : "sem avaliações")}{granPt && !granQ ? " (mês)" : ""}</div>
               {q && !granQ && <div style={{ marginTop: 9 }}>
@@ -580,8 +580,8 @@ export default function PersonalIndicatorsPage() {
             <div style={card}>
               <div style={h3}><span style={dot(T.green)} />Seu caminho a seguir</div>
               {[
-                q && q.score < 8 ? ["🎯", T.amber, "Atingir a meta de qualidade (8,0)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`]
-                  : q ? ["✅", T.green, "Meta de qualidade atingida (8,0)", `Você está em ${fmt(q.score, 2)} — acima da meta. Mantenha o padrão de revisão.`] : null,
+                q && q.score < 8.3 ? ["🎯", T.amber, "Atingir a meta de qualidade (8,3)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`]
+                  : q ? ["✅", T.green, "Meta de qualidade atingida (8,3)", `Você está em ${fmt(q.score, 2)} — acima da meta. Mantenha o padrão de revisão.`] : null,
                 q && L.lowRatePct >= 15 ? ["⚠️", T.red, `Reduzir notas baixas (<6): ${fmt(L.lowRatePct)}% → meta <15%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
                 a ? ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`] : null,
                 qualityOnly && q ? ["🛡️", T.purple, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,

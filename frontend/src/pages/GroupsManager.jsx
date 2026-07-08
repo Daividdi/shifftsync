@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Edit2, Trash2, Star, Check, Search, Users } from "lucide-react";
+import { Plus, Edit2, Trash2, Star, Check, Search, Users, Download } from "lucide-react";
 import { Card, Badge, Avatar, Btn, Modal, Input } from "../components/UI";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
@@ -135,6 +135,20 @@ export default function GroupsManager() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {flash && <Badge color={flash.startsWith("Erro") ? T.red : T.green}>{flash}</Badge>}
+          <Btn variant="ghost" icon={<Download size={14} />} onClick={() => {
+            const lines = [];
+            [...groups].sort((a, b) => (a.name || "").localeCompare(b.name || "")).forEach((g) => {
+              lines.push(g.name);
+              const members = [...(g.members || [])].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
+              const leaderId = g.leader?.id;
+              if (g.leader && !members.some((m) => m.id === leaderId)) lines.push(`${g.leader.fullName} (líder)`);
+              members.forEach((m) => lines.push(m.id === leaderId ? `${m.fullName} (líder)` : m.fullName));
+              lines.push("");
+            });
+            const blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob); const link = document.createElement("a");
+            link.href = url; link.download = `grupos_${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
+          }}>Exportar</Btn>
           <Btn icon={<Plus size={14} />} onClick={openCreate}>Novo Grupo</Btn>
         </div>
       </div>

@@ -136,18 +136,23 @@ router.get("/analytics/summary", requireAuth, (req, res) => {
   const totalUsers   = db.prepare(`SELECT COUNT(DISTINCT b.user_id) as c FROM ponto_batidas b ${where}`).get(...params).c;
   const byDay        = db.prepare(`SELECT b.date, COUNT(*) as c FROM ponto_batidas b ${where} GROUP BY b.date ORDER BY b.date`).all(...params);
 
+  // Dia incompleto = nº ímpar de registros VÁLIDOS (batidas não excluídas +
+  // correções manuais/abono) — assim o dia sai da lista conforme o RH corrige.
   const incompleteRows = db.prepare(`
     SELECT b.user_id, u.full_name, COUNT(*) as incomplete_days
     FROM (
-      SELECT b.user_id, b.date, COUNT(*) as c
-      FROM ponto_batidas b ${where}
+      SELECT b.user_id, b.date, COUNT(*) as c FROM (
+        SELECT b.user_id, b.date FROM ponto_batidas b ${where} AND b.deleted_at IS NULL
+        UNION ALL
+        SELECT b.user_id, b.date FROM ponto_records b ${where} AND b.source IN ('manual','abono')
+      ) b
       GROUP BY b.user_id, b.date
       HAVING c % 2 = 1
     ) b JOIN users u ON u.id = b.user_id
     GROUP BY b.user_id
     ORDER BY incomplete_days DESC
     LIMIT 10
-  `).all(...params);
+  `).all(...params, ...params);
 
   return res.json({ totalBatidas, totalUsers, byDay, topIncomplete: incompleteRows });
 });
@@ -187,13 +192,16 @@ router.get("/analytics/by-employee", requireAuth, (req, res) => {
   const incompleteDaysByUser = db.prepare(`
     SELECT b.user_id, COUNT(*) as incomplete_days
     FROM (
-      SELECT b.user_id, b.date, COUNT(*) as c
-      FROM ponto_batidas b ${where}
+      SELECT b.user_id, b.date, COUNT(*) as c FROM (
+        SELECT b.user_id, b.date FROM ponto_batidas b ${where} AND b.deleted_at IS NULL
+        UNION ALL
+        SELECT b.user_id, b.date FROM ponto_records b ${where} AND b.source IN ('manual','abono')
+      ) b
       GROUP BY b.user_id, b.date
       HAVING c % 2 = 1
     ) b
     GROUP BY b.user_id
-  `).all(...params);
+  `).all(...params, ...params);
 
   const incMap = {};
   incompleteDaysByUser.forEach(r => { incMap[r.user_id] = r.incomplete_days; });

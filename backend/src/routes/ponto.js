@@ -452,6 +452,7 @@ router.get("/banco-horas", requireAuth, (req, res) => {
   const to   = dateTo   || yesterday();
 
   // Find active period using the 'to' date
+  try { ensureBancoPeriodos(db); } catch (e) {}
   const periodo = db.prepare(
     "SELECT * FROM banco_horas_periodos WHERE start_date <= ? ORDER BY start_date DESC LIMIT 1"
   ).get(to);
@@ -792,6 +793,7 @@ router.get("/banco-horas", requireAuth, (req, res) => {
 router.get("/banco-horas/periodos", requireAuth, (req, res) => {
   if (!isLeader(req.user.role)) return res.status(403).json({ error: "Sem permissão" });
   const db = getDb();
+  try { ensureBancoPeriodos(db); } catch (e) {}
   const rows = db.prepare(`SELECT p.*, u.full_name as closed_by_name FROM banco_horas_periodos p LEFT JOIN users u ON u.id=p.closed_by ORDER BY p.start_date DESC`).all();
   return res.json(rows.map(r => ({ id: r.id, startDate: r.start_date, endDate: r.end_date, label: r.label, closed: Boolean(r.closed), closedAt: r.closed_at, closedByName: r.closed_by_name, createdAt: r.created_at })));
 });
@@ -855,10 +857,33 @@ router.delete("/banco-horas/ajuste/:id", requireAuth, (req, res) => {
   return res.json({ success: true });
 });
 
+// Rola os períodos do banco automaticamente: quando o período vigente termina
+// (dia 23), cria o próximo (24 → dia 23 três meses depois) e fecha o anterior.
+// Ex.: T2 24/04–23/07 → em 24/07 nasce T3 24/07–23/10, e assim sucessivamente.
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+function ensureBancoPeriodos(db) {
+  const todayStr = today();
+  let guard = 0;
+  for (;;) {
+    const last = db.prepare("SELECT * FROM banco_horas_periodos ORDER BY start_date DESC LIMIT 1").get();
+    if (!last || last.end_date >= todayStr || ++guard > 24) return;
+    const st = new Date(last.end_date + "T12:00:00Z");
+    st.setUTCDate(st.getUTCDate() + 1);
+    const en = new Date(st);
+    en.setUTCMonth(en.getUTCMonth() + 3);
+    en.setUTCDate(en.getUTCDate() - 1);
+    const sd = st.toISOString().slice(0, 10), ed = en.toISOString().slice(0, 10);
+    const label = `T${Math.floor(st.getUTCMonth() / 3) + 1}/${st.getUTCFullYear()} — ${MESES_ABREV[st.getUTCMonth()]}–${MESES_ABREV[en.getUTCMonth()]}`;
+    db.prepare("INSERT INTO banco_horas_periodos (start_date, end_date, label, closed, created_at) VALUES (?,?,?,0,datetime('now'))").run(sd, ed, label);
+    if (!last.closed) db.prepare("UPDATE banco_horas_periodos SET closed=1, closed_at=datetime('now'), closed_by='auto' WHERE id=?").run(last.id);
+  }
+}
+
 // GET /api/ponto/banco-horas/equipe — team banco de horas summary
 router.get("/banco-horas/equipe", requireAuth, (req, res) => {
   const db = getDb();
   const role = req.user.role;
+  try { ensureBancoPeriodos(db); } catch (e) {}
 
   const todayStr     = today();
   const yesterdayStr = yesterday();

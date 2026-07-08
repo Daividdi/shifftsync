@@ -615,8 +615,10 @@ router.get("/banco-horas", requireAuth, (req, res) => {
             total += -falta + adjM;
           } else total += adjM;
         } else {
-          let _b = computeDayDev(dayBs, exp, true, userSchedStart).balance;
-          if (_b < 0) _b += Math.min(abonoMinutesForDate(date), -_b);
+          const _dev = computeDayDev(dayBs, exp, true, userSchedStart);
+          let _b = _dev.balance;
+          const _ab = abonoMinutesForDate(date);
+          if (_ab > 0 && _b < 0) _b = Math.max(_b, -Math.max(0, exp - _dev.worked - _ab));
           total += _b + adjM;
         }
       } else {
@@ -642,8 +644,10 @@ router.get("/banco-horas", requireAuth, (req, res) => {
               if (_firstMin >= 720) dayStart = 780; // 13:00 afternoon shift
             }
           }
-          let _b = computeDayDev(dayBs, dayExpected, false, dayStart).balance;
-          if (_b < 0) _b += Math.min(abonoMinutesForDate(date), -_b);
+          const _dev = computeDayDev(dayBs, dayExpected, false, dayStart);
+          let _b = _dev.balance;
+          const _ab = abonoMinutesForDate(date);
+          if (_ab > 0 && _b < 0) _b = Math.max(_b, -Math.max(0, dayExpected - _dev.worked - _ab));
           total += _b + adjM;
         }
       }
@@ -714,10 +718,8 @@ router.get("/banco-horas", requireAuth, (req, res) => {
         const dev = computeDayDev(dayBatidas, expectedMin, true, userSchedStart);
         workedMin = dev.worked; diffMin = dev.balance; atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
         if (_abonoCover > 0 && diffMin < 0) {
-          const cover = Math.min(_abonoCover, -diffMin);
-          diffMin += cover;
-          const c1 = Math.min(saMin, cover); saMin -= c1;
-          const c2 = Math.min(atrasoMin, cover - c1); atrasoMin -= c2;
+          const residual = Math.max(0, expectedMin - workedMin - _abonoCover);
+          if (-residual > diffMin) { diffMin = -residual; atrasoMin = residual; saMin = 0; }
         }
       }
     } else if (!isSat && dow !== 0 && !isHoliday) {
@@ -753,13 +755,12 @@ router.get("/banco-horas", requireAuth, (req, res) => {
         const dev = computeDayDev(dayBatidas, dayExpected, false, daySchedStart);
         workedMin = dev.worked; diffMin = dev.balance; lunchMin = dev.lunchMin; expectedMin = dayExpected;
         atrasoMin = dev.atrasoMin; saMin = dev.saMin; extraMin = dev.extraMin; paidOTMin = dev.paidOTMin;
-        // Abono (atestado etc.) neutraliza o que faltou no dia — como no ERP:
-        // cobre até o gap, nunca gera crédito; abate primeiro SA, depois atraso.
+        // Dia parcialmente abonado — regra do ERP: mede em horas úteis,
+        // residual = expediente − trabalhado − abono (classificado como atraso;
+        // nunca gera crédito). Sem SA por horário nem almoço presumido.
         if (_abonoCover > 0 && diffMin < 0) {
-          const cover = Math.min(_abonoCover, -diffMin);
-          diffMin += cover;
-          const c1 = Math.min(saMin, cover); saMin -= c1;
-          const c2 = Math.min(atrasoMin, cover - c1); atrasoMin -= c2;
+          const residual = Math.max(0, expectedMin - workedMin - _abonoCover);
+          if (-residual > diffMin) { diffMin = -residual; atrasoMin = residual; saMin = 0; }
         }
       }
     } else {
@@ -1092,11 +1093,10 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
           const dev = computeDayDev(dayBs, exp, true, schedStart);
           satBal = dev.balance;
           let sAtr = dev.atrasoMin, sSA = dev.saMin;
-          if (satBal < 0) {
-            const cover = Math.min(abonoCoverForUserDate(u.id, date), -satBal);
-            satBal += cover;
-            const c1 = Math.min(sSA, cover); sSA -= c1;
-            sAtr -= Math.min(sAtr, cover - c1);
+          const _sab = abonoCoverForUserDate(u.id, date);
+          if (_sab > 0 && satBal < 0) {
+            const _res = Math.max(0, exp - dev.worked - _sab);
+            if (-_res > satBal) { satBal = -_res; sAtr = _res; sSA = 0; }
           }
           periodExtras += dev.extraMin;
           periodPaidOT += dev.paidOTMin;
@@ -1125,11 +1125,10 @@ router.get("/banco-horas/equipe", requireAuth, (req, res) => {
           }
           const dev = computeDayDev(dayBs, dayExp, false, dayStart);
           let dBal = dev.balance, dAtr = dev.atrasoMin, dSA = dev.saMin;
-          if (dBal < 0) {
-            const cover = Math.min(abonoCoverForUserDate(u.id, date), -dBal);
-            dBal += cover;
-            const c1 = Math.min(dSA, cover); dSA -= c1;
-            dAtr -= Math.min(dAtr, cover - c1);
+          const _dab = abonoCoverForUserDate(u.id, date);
+          if (_dab > 0 && dBal < 0) {
+            const _res = Math.max(0, dayExp - dev.worked - _dab);
+            if (-_res > dBal) { dBal = -_res; dAtr = _res; dSA = 0; }
           }
           add(date, dBal);
           periodExtras += dev.extraMin;

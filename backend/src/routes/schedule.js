@@ -16,12 +16,15 @@ router.get("/", requireAuth, (req, res) => {
 
   // ── Role-based scope ──────────────────────────────────────────────────
   if (role === "employee") {
-    const memberGroup = db.prepare(
-      "SELECT group_id FROM group_members WHERE user_id = ? LIMIT 1"
-    ).get(userId);
-    if (!memberGroup) return res.json({});
-    conditions.push("s.group_id = ?");
-    params.push(memberGroup.group_id);
+    // TODOS os grupos do usuário — com o antigo LIMIT 1, quem estava em mais
+    // de um grupo via a escala de um grupo arbitrário (às vezes sem as
+    // próprias linhas) e o calendário quebrava.
+    const memberGroups = db.prepare(
+      "SELECT group_id FROM group_members WHERE user_id = ?"
+    ).all(userId);
+    if (memberGroups.length === 0) return res.json({});
+    conditions.push(`s.group_id IN (${memberGroups.map(() => "?").join(",")})`);
+    params.push(...memberGroups.map(g => g.group_id));
   } else if (role === "leader") {
     const led   = db.prepare("SELECT id FROM groups WHERE leader_id = ?").all(userId);
     const coLed = db.prepare("SELECT group_id as id FROM group_co_leaders WHERE user_id = ?").all(userId);

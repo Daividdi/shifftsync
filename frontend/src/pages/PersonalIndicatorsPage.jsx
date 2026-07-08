@@ -196,8 +196,8 @@ export default function PersonalIndicatorsPage() {
     const buckets = [["<60%", 0, 60], ["60–80%", 60, 80], ["80–100%", 80, 100], ["100–120%", 100, 120], ["≥120%", 120, 1e9]].map(([lab, lo, hi]) => ({ lab, n: rows.filter(p => p.pct >= lo && p.pct < hi).length }));
     const maxBucket = Math.max(...buckets.map(b => b.n), 1);
     const exportCsv = () => {
-      const head = ["Colaborador", "Equipe", "Atingimento%", "Delta p.p.", "Posicao", "GrupoTam", "Qualidade", "Avaliacoes", "NotasBaixas%", "NotasBaixas", "Casos"];
-      const lines = sorted.map(p => [p.name, p.grp, p.pct, p.deltaPct == null ? "" : p.deltaPct, p.rank || "", p.groupSize || "", p.score == null ? "" : String(p.score).replace(".", ","), p.qty || "", String(p.lowRatePct).replace(".", ","), p.lowTotal, p.cases].join(";"));
+      const head = ["Colaborador", "Equipe", "Atingimento%", "Delta p.p.", "Posicao", "GrupoTam", "Qualidade", "Avaliacoes", "QC%", "QCInspecoes", "NotasBaixas%", "NotasBaixas", "Casos"];
+      const lines = sorted.map(p => [p.name, p.grp, p.pct, p.deltaPct == null ? "" : p.deltaPct, p.rank || "", p.groupSize || "", p.score == null ? "" : String(p.score).replace(".", ","), p.qty || "", p.qcRate == null ? "" : String(p.qcRate).replace(".", ","), p.qcInsp || "", String(p.lowRatePct).replace(".", ","), p.lowTotal, p.cases].join(";"));
       const blob = new Blob(["﻿" + [head.join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob); const link = document.createElement("a");
       link.href = url; link.download = `ranking_${teamGroup === "ALL" ? "todos" : grpShort(teamGroup)}_${trend?.monthLabel || ""}.csv`; link.click(); URL.revokeObjectURL(url);
@@ -289,7 +289,7 @@ export default function PersonalIndicatorsPage() {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr>
-              {[["name", "Colaborador"], ["grp", "Equipe"], ["pct", "Atingimento"], ["rank", "Posição"], ["score", "Qualidade"], ["lowRatePct", "Notas baixas"]].map(([k, lab]) => (
+              {[["name", "Colaborador"], ["grp", "Equipe"], ["pct", "Atingimento"], ["rank", "Posição"], ["score", "Qualidade"], ["qcRate", "QC"], ["lowRatePct", "Notas baixas"]].map(([k, lab]) => (
                 <th key={k} onClick={() => sortKey(k)} style={{ padding: "11px 14px", textAlign: (k === "name" || k === "grp") ? "left" : "right", color: T.t9, fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: ".04em", cursor: "pointer", whiteSpace: "nowrap", borderBottom: `1px solid ${T.border}`, background: T.bgDeep, userSelect: "none" }}>{lab}{teamSort.k === k ? (teamSort.dir < 0 ? " ▾" : " ▴") : ""}</th>
               ))}
             </tr></thead>
@@ -306,10 +306,11 @@ export default function PersonalIndicatorsPage() {
                   <td style={{ padding: "10px 14px", textAlign: "right" }}>{p.pct == null ? <span style={{ color: T.t9 }} title="Sem meta de produtividade (revisor QC)">—</span> : <b style={{ color: p.pct >= 100 ? T.green : p.pct >= 80 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{p.pct}%</b>}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: T.t2, fontVariantNumeric: "tabular-nums" }}>{p.rank ? `${p.rank}º/${p.groupSize}` : "—"}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right" }}><b style={{ color: p.score >= 8.3 ? T.green : T.amber, fontVariantNumeric: "tabular-nums" }}>{p.score != null ? fmt(p.score, 2) : "—"}</b></td>
+                  <td style={{ padding: "10px 14px", textAlign: "right" }}>{p.qcRate == null ? <span style={{ color: T.t9 }}>—</span> : <b style={{ color: p.qcRate >= 80 ? T.green : p.qcRate >= 65 ? T.amber : T.red, fontVariantNumeric: "tabular-nums" }}>{fmt(p.qcRate)}%</b>}</td>
                   <td style={{ padding: "10px 14px", textAlign: "right", color: p.lowRatePct >= 15 ? T.red : p.lowRatePct > 0 ? T.amber : T.t8, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(p.lowRatePct, 1)}% <span style={{ color: T.t9, fontWeight: 400 }}>({p.lowTotal})</span></td>
                 </tr>
               ); })}
-              {!sorted.length && <tr><td colSpan={6} style={{ padding: 30, textAlign: "center", color: T.t6 }}>Sem colaboradores no time.</td></tr>}
+              {!sorted.length && <tr><td colSpan={7} style={{ padding: 30, textAlign: "center", color: T.t6 }}>Sem colaboradores no time.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -388,7 +389,7 @@ export default function PersonalIndicatorsPage() {
         const isL3 = gran === "last3";
         const month = (selMonth && d.byMonth[selMonth]) ? selMonth : d.latest;
         const S = isL3 ? (d.last3 || d.monthly) : isAcc ? d.monthly : d.byMonth[month];
-        const a = S.attainment, q = S.quality, L = S.lowScore;
+        const a = S.attainment, q = S.quality, L = S.lowScore, K = S.qc;
         const granSeries = gran === "day" ? (S.dailyProd || []) : gran === "week" ? (S.weeklyProd || []) : null;
         let granDef = (granSeries && granSeries.length) ? granSeries.length - 1 : 0;
         if (granSeries) for (let _i = granSeries.length - 1; _i >= 0; _i--) { if (granSeries[_i][1] > 0) { granDef = _i; break; } }
@@ -453,10 +454,11 @@ export default function PersonalIndicatorsPage() {
             const items = [
               a && a.pct != null ? { pct: a.pct, label: "Produção", val: fmt(a.pct) + "%", unit: "da quota", tgt: "meta 100% da quota MTS" } : null,
               q && q.score != null ? { pct: q.score / 8.3 * 100, label: "Qualidade", val: fmt(q.score, 2), unit: "/10", tgt: "meta 8,30" } : null,
+              !qualityOnly && K && K.passRate != null ? { pct: K.passRate / 80 * 100, label: "QC interno", val: fmt(K.passRate) + "%", unit: "aprovação", tgt: "meta 80% (nota ≥ 80)" } : null,
             ].filter(Boolean);
             if (!items.length) return null;
             return <div className="wf-in" style={{ animationDelay: "40ms", ...card, marginBottom: 14 }}>
-              <div style={h3}><span style={dot(T.green)} />Minhas metas<InfoTip text="Produção: meta = 100% da sua quota MTS (atingimento do período selecionado). Qualidade: meta = nota 8,3 dos médicos (0–10), o benchmark do centro. O anel mostra quanto da meta foi alcançado." T={T} /></div>
+              <div style={h3}><span style={dot(T.green)} />Minhas metas<InfoTip text="Produção: meta = 100% da sua quota MTS (atingimento do período selecionado). Qualidade: meta = nota 8,3 dos médicos (0–10), o benchmark do centro. QC interno: meta = 80% das inspeções aprovadas (nota ≥ 80). O anel mostra quanto da meta foi alcançado." T={T} /></div>
               <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: 18 }}>
                 {items.map((it, i) => { const cc = colOf(it.pct); return (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
@@ -473,7 +475,7 @@ export default function PersonalIndicatorsPage() {
           })()}
 
           {/* KPIs */}
-          <div className="wf-in" style={{ animationDelay: "70ms", display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : "repeat(3,1fr)", gap: 14, marginBottom: 14 }}>
+          <div className="wf-in" style={{ animationDelay: "70ms", display: "grid", gridTemplateColumns: qualityOnly ? "minmax(280px,440px)" : (K ? "repeat(auto-fit,minmax(230px,1fr))" : "repeat(3,1fr)"), gap: 14, marginBottom: 14 }}>
             {!qualityOnly && <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
               <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.accent}, transparent)` }} />
               <div style={h3}><span style={dot(T.accent)} />Atingimento (% da meta)<InfoTip text="Casos concluídos ponderados (Novo = 1, Refinamento = 2/3, Modificação = 1/3) ÷ sua quota MTS. Fonte: warehouse oficial (Doris), atualizado automaticamente todo dia às 06:00. 100% = meta batida." T={T} /></div>
@@ -498,6 +500,16 @@ export default function PersonalIndicatorsPage() {
                   : <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999, background: T.t1 + "12", color: T.t3 }}>última nota baixa: {L.lastLowWeeksAgo === 0 ? "período atual" : L.lastLowWeeksAgo == null ? "nunca" : `${L.lastLowWeeksAgo} sem atrás`}</span>}
               </div>}
             </div>
+            {!qualityOnly && K && <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
+              <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.purple}, transparent)` }} />
+              <div style={h3}><span style={dot(T.purple)} />QC interno (aprovação)<InfoTip text="Inspeções internas de qualidade dos seus casos (nota 0–100), direto do warehouse oficial — atualizado todo dia às 06:10. Aprovada = nota ≥ 80; meta = 80% de aprovação." T={T} /></div>
+              <div><Num value={K.passRate} style={{ fontSize: 38, fontWeight: 800, color: T.purple }} /><span style={{ fontSize: 15, fontWeight: 700, color: T.t6 }}>%</span></div>
+              <div style={{ marginTop: 9, fontSize: 12, color: T.t2, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                {K.delta != null && <TrendPill dir={K.delta > 0 ? "up" : K.delta < 0 ? "down" : "flat"} label={`${K.delta > 0 ? "+" : ""}${fmt(K.delta, 1)} p.p.`} T={T} />} aprovação · meta 80%
+              </div>
+              <div style={{ fontSize: 10.5, color: T.t6, marginTop: 10 }}>nota média {fmt(K.score, 1)} · {K.inspections} inspeções{K.groupRate != null ? ` · grupo ${fmt(K.groupRate)}%` : ""}</div>
+              {((isL3 ? null : d.monthly.qcMonthly) || []).length > 1 && <div style={{ marginTop: 8 }}><Spark data={d.monthly.qcMonthly} color={T.purple} /></div>}
+            </div>}
             {!qualityOnly && <div className="wf-card" style={{ ...card, position: "relative", overflow: "hidden" }}>
               <i aria-hidden style={{ position: "absolute", top: 0, left: 0, right: "30%", height: 2.5, background: `linear-gradient(90deg, ${T.green}, transparent)` }} />
               <div style={h3}><span style={dot(T.green)} />Posição no grupo<InfoTip text="Sua colocação por atingimento da meta entre os colaboradores do seu grupo no período." T={T} /></div>
@@ -583,6 +595,8 @@ export default function PersonalIndicatorsPage() {
                 q && q.score < 8.3 ? ["🎯", T.amber, "Atingir a meta de qualidade (8,3)", `Você está em ${fmt(q.score, 2)}. Revise antes de finalizar — pequenas correções elevam a média rápido.`]
                   : q ? ["✅", T.green, "Meta de qualidade atingida (8,3)", `Você está em ${fmt(q.score, 2)} — acima da meta. Mantenha o padrão de revisão.`] : null,
                 q && L.lowRatePct >= 15 ? ["⚠️", T.red, `Reduzir notas baixas (<6): ${fmt(L.lowRatePct)}% → meta <15%`, `${L.total} de ${L.totalQty} avaliações abaixo de 6. Identifique o caso recorrente e padronize o checklist.`] : null,
+                !qualityOnly && K && K.passRate != null && K.passRate < 80 ? ["🧪", T.purple, `Elevar a aprovação no QC interno (${fmt(K.passRate)}% → meta 80%)`, `${K.inspections} inspeções com nota média ${fmt(K.score, 1)}. Revise os apontamentos das inspeções reprovadas — eles indicam exatamente onde ajustar.`]
+                  : !qualityOnly && K && K.passRate != null ? ["🛡️", T.green, `QC interno na meta (${fmt(K.passRate)}% de aprovação)`, "Mantenha o padrão — inspeções aprovadas sustentam a nota do centro."] : null,
                 a ? ["🚀", T.accent, a.pct >= 100 ? "Manter volume acima da meta" : "Elevar o volume até a meta", a.pct >= 100 ? `${fmt(a.pct)}% — excelente. Sustente acima de 100% sem perder qualidade e suba no ranking.` : `${fmt(a.pct)}% — foque em chegar a 100% de forma consistente.`] : null,
                 qualityOnly && q ? ["🛡️", T.purple, "Mantenha a consistência na revisão", "Sem meta de volume — seu foco é a qualidade. Mantenha o padrão e zere as notas baixas."] : null,
               ].filter(Boolean).map(([ic, c, t, p], i, arr) => (

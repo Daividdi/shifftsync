@@ -153,6 +153,19 @@ function buildPersonBundle(d, inputName) {
   const qGroupLike = (like) => d.prepare("SELECT AVG(avg_score) avg, MAX(avg_score) best FROM quality_designer WHERE group_no=? AND period_type='month' AND snapshot_date LIKE ?").get(group, like);
   const lowAgg = (weeks) => { const total = weeks.reduce((s, w) => s + w.low, 0), totalQty = weeks.reduce((s, w) => s + w.qty, 0), totalUnfit = weeks.reduce((s, w) => s + w.unfit, 0); const wlow = weeks.filter(w => w.low > 0).length; let streak = 0; for (let i = weeks.length - 1; i >= 0; i--) { if (weeks[i].low === 0) streak++; else break; } let lastAgo = null; for (let i = weeks.length - 1, k = 0; i >= 0; i--, k++) { if (weeks[i].low > 0) { lastAgo = k; break; } } return { total, totalQty, totalUnfit, lowRatePct: totalQty ? Number((total / totalQty * 100).toFixed(1)) : 0, weeksWithLow: wlow, totalWeeks: weeks.length, streakNoLow: streak, lastLowWeeksAgo: lastAgo }; };
 
+  // QC interno (inspeções do warehouse): aprovada = nota >= 80, meta 80% de aprovação
+  const qcLike = (like) => d.prepare("SELECT SUM(inspections) insp, SUM(passed) passed, SUM(approved_yes) yes, SUM(avg_score*inspections)/NULLIF(SUM(inspections),0) score FROM qc_designer WHERE designer_name=? AND snapshot_date LIKE ?").get(name, like);
+  const qcIn = (ms) => ms.length ? d.prepare(`SELECT SUM(inspections) insp, SUM(passed) passed, SUM(approved_yes) yes, SUM(avg_score*inspections)/NULLIF(SUM(inspections),0) score FROM qc_designer WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${ms.map(() => "?").join(",")})`).get(name, ...ms) : null;
+  const qcGroupLike = (like) => d.prepare("SELECT SUM(passed)*100.0/NULLIF(SUM(inspections),0) rate FROM qc_designer WHERE group_no=? AND snapshot_date LIKE ?").get(group, like);
+  const qcOf = (kc, kp, kg) => kc && kc.insp ? {
+    inspections: kc.insp,
+    passRate: round(kc.passed / kc.insp * 100, 1),
+    delta: kp && kp.insp ? round(kc.passed / kc.insp * 100 - kp.passed / kp.insp * 100, 1) : null,
+    score: round(kc.score, 1),
+    yesRate: round((kc.yes || 0) / kc.insp * 100, 1),
+    groupRate: kg && kg.rate != null ? round(kg.rate, 1) : null,
+  } : null;
+
   const monthBundle = (mo) => {
     const like = mo + "-%", pm = prevMonthStr(mo);
     const cur = aggLike(like), prev = aggLike(pm + "-%");
@@ -164,6 +177,7 @@ function buildPersonBundle(d, inputName) {
       periodLabel: cap(MN[+mo.slice(5, 7) - 1]) + "/" + mo.slice(0, 4), monthShort: PTM[+mo.slice(5, 7) - 1], month: mo, isLatest: mo === latest,
       attainment: { pct: round(cur.pct), deltaPct: prev && prev.pct != null ? round(cur.pct - prev.pct) : null, completed: round(cur.comp, 1), days: cur.days, groupAvg: round(comp.avg), groupBest: round(comp.best), rank: comp.rank, groupSize: comp.total, rankPrev: compPrev ? compPrev.rank : null, trend: trend(daily) },
       quality: qc ? { score: round(qc.score, 2), qty: qc.qty, delta: qp && qp.score != null ? round(qc.score - qp.score, 2) : null, groupAvg: round(qg ? qg.avg : null, 2), groupBest: round(qg ? qg.best : null, 2), trend: trend(weeks) } : null,
+      qc: qcOf(qcLike(like), qcLike(pm + "-%"), qcGroupLike(like)),
       lowScore: lowAgg(weeks), cases: { new: cur.nc || 0, mod: cur.mod || 0, ref: cur.ref || 0 },
       dailyProd: daily, weeklyProd, weeklyLow: weeks,
     };
@@ -187,6 +201,8 @@ function buildPersonBundle(d, inputName) {
     periodLabel: "Acumulado · " + PTM[+months[0].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
     attainment: { pct: round(curAll.pct), deltaPct: null, completed: round(curAll.comp, 1), days: curAll.days, groupAvg: round(compAll.avg), groupBest: round(compAll.best), rank: compAll.rank, groupSize: compAll.total, rankPrev: null, trend: trend(monthsSeries) },
     quality: qAll && qAll.score != null ? { score: round(qAll.score, 2), qty: qAll.qty, delta: null, groupAvg: round(qgAll ? qgAll.avg : null, 2), groupBest: round(qgAll ? qgAll.best : null, 2), trend: trend(qualityMonthly) } : null,
+    qc: qcOf(qcLike("%"), null, qcGroupLike("%")),
+    qcMonthly: d.prepare("SELECT substr(snapshot_date,1,7) m, ROUND(SUM(passed)*100.0/NULLIF(SUM(inspections),0),1) rate FROM qc_designer WHERE designer_name=? GROUP BY m ORDER BY m").all(name).map(r => [PTM[+r.m.slice(5, 7) - 1], r.rate]),
     lowScore: lowAgg(weeklyLowAll), cases: { new: curAll.nc || 0, mod: curAll.mod || 0, ref: curAll.ref || 0 },
     monthsSeries, qualityMonthly, weeklyLowAll,
   };
@@ -203,6 +219,7 @@ function buildPersonBundle(d, inputName) {
     periodLabel: "Últimos 3 meses · " + PTM[+l3m[0].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4),
     attainment: { pct: l3a && l3a.quo > 0 ? round(l3a.comp / l3a.quo * 100) : null, deltaPct: null, completed: round(l3a.comp, 1), days: l3a.days, groupAvg: round(l3comp && l3comp.avg), groupBest: round(l3comp && l3comp.best), rank: l3comp && l3comp.rank, groupSize: l3comp && l3comp.total, rankPrev: null, trend: trend(monthsSeries.slice(-3)) },
     quality: l3q && l3q.score != null ? { score: round(l3q.score, 2), qty: l3q.qty, delta: null, groupAvg: round(l3qg ? l3qg.avg : null, 2), groupBest: round(l3qg ? l3qg.best : null, 2), trend: trend(l3weeks) } : null,
+    qc: qcOf(qcIn(l3m), null, null),
     lowScore: lowAgg(l3weeks), cases: { new: l3a.nc || 0, mod: l3a.mod || 0, ref: l3a.ref || 0 },
     monthsSeries: monthsSeries.slice(-3), qualityMonthly: qualityMonthly.slice(-3), weeklyLowAll: l3weeks,
   };
@@ -394,9 +411,14 @@ router.get("/overview", requireAuth, (req, res) => {
       const qseries = d.prepare(
         "SELECT avg_score s FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC LIMIT 12"
       ).all(x.name).reverse().map(r => r.s);
+      const kq = d.prepare(
+        `SELECT SUM(inspections) insp, SUM(passed) passed, SUM(avg_score*inspections)/NULLIF(SUM(inspections),0) score FROM qc_designer WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${mph})`
+      ).get(x.name, ...rangeMonths);
       const rm = rankMap(x.grp);
       return {
         name: x.name, grp: x.grp, lvl: x.lvl,
+        qcRate: kq && kq.insp ? round(kq.passed / kq.insp * 100, 1) : null,
+        qcScore: kq && kq.insp ? round(kq.score, 1) : null, qcInsp: kq ? (kq.insp || 0) : 0,
         pct: round(pct), deltaPct: pct != null && apPct != null ? round(pct - apPct) : null,
         rank: rm.map[x.name] || null, groupSize: rm.size,
         score: q && q.score != null ? round(q.score, 2) : null, qty: q ? q.qty : 0,
@@ -488,6 +510,7 @@ router.get("/data-status", requireAuth, (req, res) => {
     { key: "productivity", label: "Produtividade", cadence: "daily", auto: true, ...one("SELECT MAX(snapshot_date) last FROM productivity") },
     { key: "quality_week", label: "Qualidade (semana)", cadence: "weekly", auto: false, ...one("SELECT MAX(snapshot_date) last FROM quality_designer WHERE period_type='week'") },
     { key: "quality_month", label: "Qualidade (mês)", cadence: "monthly", auto: false, ...one("SELECT MAX(snapshot_date) last FROM quality_designer WHERE period_type='month'") },
+    { key: "qc", label: "QC interno", cadence: "daily", auto: true, ...one("SELECT MAX(snapshot_date) last FROM qc_designer") },
   ]);
 });
 

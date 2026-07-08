@@ -62,6 +62,8 @@ function runMigrations() {
     CREATE INDEX IF NOT EXISTS idx_vac_status ON vacation_records(status)`);
   } catch (_) {}
   try { db.prepare("ALTER TABLE users ADD COLUMN hire_date TEXT").run(); } catch (_) {}
+  // bi_name: override do nome usado no BI quando difere do cadastro (ex.: sobrenome divergente no warehouse)
+  try { db.exec("ALTER TABLE users ADD COLUMN bi_name TEXT"); } catch (e) {}
   // Add birth_date column to users (safe — ignored if already exists)
   try { db.prepare("ALTER TABLE users ADD COLUMN birth_date TEXT").run(); } catch (_) {}
   // Add team column to groups (safe)

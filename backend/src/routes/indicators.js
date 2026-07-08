@@ -231,7 +231,7 @@ function canSeePerson(ss, userId, role, targetName) {
 
 // GET /api/indicators/me — personal indicators for the logged-in user only.
 router.get("/me", requireAuth, (req, res) => {
-  const user = getDb().prepare("SELECT full_name FROM users WHERE id=?").get(req.user.id);
+  const user = getDb().prepare("SELECT COALESCE(bi_name, full_name) AS full_name FROM users WHERE id=?").get(req.user.id);
   if (!user || !user.full_name) return res.status(404).json({ error: "Usuário não encontrado" });
   let d;
   try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }

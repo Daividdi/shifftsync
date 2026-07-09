@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
-import { BarChart3, Settings2 } from "lucide-react";
+import { BarChart3, Settings2, TrendingUp } from "lucide-react";
 
 const SCREENS = [
   { id: "live",       label: "Produção ao vivo",     color: "#f59e0b" },
@@ -12,6 +12,7 @@ const SCREENS = [
 ];
 
 const BI_MANAGERS = ["hr", "ti", "gerencia", "leader"];
+const EXEC_ROLES  = ["hr", "ti", "gerencia"]; // painel executivo BR × MY — mais restrito que a gestão do BI
 
 export default function BIPage() {
   const { theme: T } = useTheme();
@@ -23,6 +24,7 @@ export default function BIPage() {
 
   const role = user?.role || "employee";
   const canManageBI = BI_MANAGERS.includes(role);
+  const canSeeExec  = EXEC_ROLES.includes(role);
   const biUrl = `${window.location.origin}/bi/`;
 
   function sendToBI(msg) {
@@ -40,6 +42,12 @@ export default function BIPage() {
     sendToBI({ type: "BI_GOTO_PAGE", page: "admin" });
   }
 
+  function openExecutivo() {
+    setBiMode("exec");
+    sendToBI({ type: "AUTH_ROLE", role });
+    sendToBI({ type: "BI_GOTO_PAGE", page: "exec" });
+  }
+
   useEffect(() => {
     const handler = (e) => {
       if (e.data?.type === "SCREEN_CHANGED") setScreenIdx(e.data.idx);
@@ -52,6 +60,7 @@ export default function BIPage() {
   useEffect(() => {
     const t = setTimeout(() => {
       sendToBI({ type: "SET_SCREEN", idx: screenIdx });
+      if (canSeeExec) sendToBI({ type: "AUTH_ROLE", role });
     }, 1500);
     return () => clearTimeout(t);
   }, []);
@@ -86,6 +95,24 @@ export default function BIPage() {
             </button>
           ))}
         </div>
+
+        {canSeeExec && biMode === "dashboard" && (
+          <button
+            onClick={openExecutivo}
+            style={{
+              display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+              background: T.bgApp, border: `1px solid ${T.border}`,
+              borderRadius: 6, padding: "4px 11px",
+              color: T.t4, fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+              transition: "background 0.12s, color 0.12s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#8b5cf618"; e.currentTarget.style.color = "#8b5cf6"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = T.bgApp; e.currentTarget.style.color = T.t4; }}
+            title="Painel executivo — comparativo entre centros"
+          >
+            <TrendingUp size={12} /> Executivo
+          </button>
+        )}
 
         {canManageBI && biMode === "dashboard" && (
           <button

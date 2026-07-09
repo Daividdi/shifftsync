@@ -137,6 +137,7 @@ export default function PersonalIndicatorsPage() {
   const [ov, setOv] = useState(null);              // overview (roster + métricas)
   const [trend, setTrend] = useState(null);        // team-trend (evolução)
   const [teamGroup, setTeamGroup] = useState("ALL");
+  const [runrate, setRunrate] = useState(null);
   const [teamGran, setTeamGran] = useState("month"); // month | week
   const [teamSort, setTeamSort] = useState({ k: "pct", dir: -1 });
   const [hovRow, setHovRow] = useState(null);
@@ -151,6 +152,12 @@ export default function PersonalIndicatorsPage() {
   useEffect(() => {
     if (mode === "team") api.get(`/indicators/overview?months=${teamMonths}`).then(r => setOv(r.data)).catch(() => setOv({ people: [] }));
   }, [mode, teamMonths]);
+
+  useEffect(() => {
+    if (mode !== "team") return;
+    const g = teamGroup && teamGroup !== "ALL" ? `?group=${encodeURIComponent(teamGroup)}` : "";
+    api.get(`/indicators/runrate${g}`).then(r => setRunrate(r.data)).catch(() => setRunrate(null));
+  }, [mode, teamGroup]);
 
   useEffect(() => {
     if (mode !== "team") return;
@@ -287,6 +294,39 @@ export default function PersonalIndicatorsPage() {
               ))}
             </div>
             {risky.length > 8 && <div style={{ fontSize: 11, color: T.t6, marginTop: 8 }}>+{risky.length - 8} outro(s) colaborador(es) com sinais de atenção.</div>}
+          </div>
+        );
+      })()}
+
+      {runrate && runrate.hasData && (() => {
+        const rr = runrate;
+        const col = rr.projectedPct >= 100 ? T.green : rr.projectedPct >= 80 ? T.amber : T.red;
+        const gapDaily = rr.neededDailyRate != null && rr.currentDailyRate != null ? Number((rr.neededDailyRate - rr.currentDailyRate).toFixed(1)) : null;
+        return (
+          <div className="wf-in" style={{ animationDelay: "185ms", ...card, marginBottom: 14, borderLeft: `3px solid ${col}` }}>
+            <div style={h3}><span style={dot(col)} />Projeção de fechamento do mês<InfoTip text="Estende o ritmo médio diário do time (concluído/dia útil) até o fim do mês, descontando a capacidade perdida nos dias restantes por férias já aprovadas. 100% = meta batida." T={T} /></div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 22, alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 34, fontWeight: 800, color: col, lineHeight: 1 }}>{rr.projectedPct}<span style={{ fontSize: 16 }}>%</span></div>
+                <div style={{ fontSize: 11, color: T.t6, marginTop: 4 }}>projeção para {rr.monthEndStr.slice(8, 10)}/{rr.monthEndStr.slice(5, 7)}</div>
+              </div>
+              <div style={{ width: 1, height: 40, background: T.border }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 14, flex: 1 }}>
+                <div><div style={{ fontSize: 11, color: T.t6 }}>Hoje ({rr.daysElapsed}d)</div><b style={{ fontSize: 15, color: T.t1 }}>{rr.currentPct != null ? rr.currentPct + "%" : "—"}</b></div>
+                <div><div style={{ fontSize: 11, color: T.t6 }}>Ritmo atual</div><b style={{ fontSize: 15, color: T.t1 }}>{fmt(rr.currentDailyRate, 1)}/dia</b></div>
+                <div><div style={{ fontSize: 11, color: T.t6 }}>Ritmo p/ 100%</div><b style={{ fontSize: 15, color: gapDaily > 0 ? T.amber : T.green }}>{fmt(rr.neededDailyRate, 1)}/dia</b></div>
+                <div><div style={{ fontSize: 11, color: T.t6 }}>Restam ({rr.daysRemaining}d)</div><b style={{ fontSize: 15, color: T.t1 }}>{rr.headcount} pessoas</b></div>
+                {rr.vacationLossPct > 0 && <div><div style={{ fontSize: 11, color: T.t6 }}>Perda por férias</div><b style={{ fontSize: 15, color: T.amber }}>−{rr.vacationLossPct}%</b></div>}
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, color: T.t3, marginTop: 10 }}>
+              {rr.onTrack
+                ? `No ritmo atual, o time fecha o mês acima da meta.`
+                : gapDaily > 0
+                  ? `No ritmo atual, o time fecha em ${rr.projectedPct}% da meta. Faltam ${fmt(gapDaily, 1)} casos/dia a mais para bater 100%.`
+                  : `No ritmo atual, o time fecha em ${rr.projectedPct}% da meta.`}
+              {rr.vacationLossPct >= 10 && ` Atenção: ${rr.vacationLossPct}% da capacidade dos dias restantes está perdida por férias aprovadas.`}
+            </div>
           </div>
         );
       })()}

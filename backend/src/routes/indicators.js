@@ -665,4 +665,132 @@ router.post("/internal/monday-digest", (req, res) => {
   }
 });
 
+// GET /api/indicators/runrate?group=BR-ATD-BR1 — projeção de fechamento do
+// mês (run-rate) considerando o ritmo atual e a perda de capacidade por
+// férias aprovadas nos dias restantes. gestor sem group = empresa toda.
+router.get("/runrate", requireAuth, (req, res) => {
+  const ss = getDb();
+  const me = ss.prepare("SELECT id, role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
+  const GESTOR = new Set(["gerencia", "hr", "ti"]);
+  let memberNames = null, memberUserIds = null;
+  if (!GESTOR.has(me.role)) {
+    const led = ss.prepare(`
+      SELECT g.id FROM groups g WHERE g.leader_id=?
+      UNION SELECT g.id FROM groups g JOIN group_co_leaders cl ON cl.group_id=g.id WHERE cl.user_id=?
+    `).all(req.user.id, req.user.id);
+    if (!led.length) return res.status(403).json({ error: "Sem visão de time" });
+    const ids = led.map(g => g.id), ph = ids.map(() => "?").join(",");
+    const members = ss.prepare(
+      `SELECT DISTINCT u.id, u.full_name fn FROM group_members gm JOIN users u ON u.id=gm.user_id
+       WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name!=''`
+    ).all(...ids);
+    memberNames = members.map(m => m.fn);
+    memberUserIds = members.map(m => m.id);
+  }
+
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+  try {
+    const group = (req.query.group || "").trim() || null;
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const monthKey = todayStr.slice(0, 7);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const monthEndStr = monthEnd.toISOString().slice(0, 10);
+
+    let scopeNames = null;
+    if (memberNames) {
+      const allDesig = d.prepare("SELECT DISTINCT designer_name name FROM productivity").all().map(r => r.name);
+      scopeNames = allDesig.filter(n => memberNames.some(mn => nameMatch(mn, n)));
+      if (!scopeNames.length) scopeNames = ["__none__"];
+    }
+    const where = () => {
+      const parts = [], params = [];
+      if (scopeNames) { parts.push(`designer_name IN (${scopeNames.map(() => "?").join(",")})`); params.push(...scopeNames); }
+      if (group) { parts.push("group_no = ?"); params.push(group); }
+      return { clause: parts.length ? " AND " + parts.join(" AND ") : "", params };
+    };
+
+    const w = where();
+    const soFar = d.prepare(`SELECT SUM(completed) c, SUM(quota) q, COUNT(DISTINCT snapshot_date) days FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(monthKey + "-%", ...w.params);
+    const headRow = d.prepare(`SELECT COUNT(DISTINCT designer_name) n FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).get(monthKey + "-%", ...w.params);
+
+    // Escopo REAL de designers deste pedido (líder + grupo, se houver) — usado
+    // para achar as férias certas. Sem isso, um ?group= de gestor caía no
+    // ramo "empresa toda" das férias (memberUserIds só existe para líder).
+    const requestScopeNames = d.prepare(`SELECT DISTINCT designer_name name FROM productivity WHERE snapshot_date LIKE ? AND quota>0${w.clause}`).all(monthKey + "-%", ...w.params).map(r => r.name);
+    if (requestScopeNames.length) {
+      const allUsers = ss.prepare("SELECT id, full_name FROM users WHERE active=1 AND full_name IS NOT NULL AND full_name!=''").all();
+      memberUserIds = allUsers.filter(u => requestScopeNames.some(n => nameMatch(u.full_name, n))).map(u => u.id);
+    }
+    const headcount = headRow ? headRow.n : 0;
+    const daysElapsed = soFar ? soFar.days : 0;
+    const completedSoFar = soFar && soFar.c || 0, quotaSoFar = soFar && soFar.q || 0;
+
+    if (!daysElapsed || !headcount) return res.json({ hasData: false });
+
+    const holidaySet = new Set(ss.prepare("SELECT date FROM holidays WHERE date>=? AND date<=?").all(todayStr, monthEndStr).map(r => r.date));
+
+    // Dias úteis restantes no mês (amanhã → fim do mês). Sábado conta como
+    // dia útil aqui (o warehouse já registra produção de sábado); domingo não.
+    const remainingDates = [];
+    for (let dt = new Date(today); dt <= monthEnd; ) {
+      dt.setDate(dt.getDate() + 1);
+      if (dt > monthEnd) break;
+      const ds = dt.toISOString().slice(0, 10);
+      if (dt.getDay() !== 0 && !holidaySet.has(ds)) remainingDates.push(ds);
+    }
+    const daysRemaining = remainingDates.length;
+
+    // Férias aprovadas do escopo, sobrepondo os dias restantes.
+    let vacRows = [];
+    if (daysRemaining) {
+      if (memberUserIds) {
+        const ph = memberUserIds.map(() => "?").join(",");
+        vacRows = ss.prepare(`SELECT user_id, start_date, end_date FROM vacation_records WHERE status='approved' AND user_id IN (${ph}) AND start_date<=? AND end_date>=?`).all(...memberUserIds, monthEndStr, todayStr);
+      } else {
+        vacRows = ss.prepare(`SELECT user_id, start_date, end_date FROM vacation_records WHERE status='approved' AND start_date<=? AND end_date>=?`).all(monthEndStr, todayStr);
+      }
+    }
+    let vacantPersonDays = 0;
+    if (vacRows.length) {
+      const vacDateSet = new Set();
+      for (const ds of remainingDates) {
+        for (const v of vacRows) if (ds >= v.start_date && ds <= v.end_date) vacantPersonDays++;
+      }
+    }
+    const totalPersonDaysRemaining = headcount * daysRemaining;
+    const activePersonDaysRemaining = Math.max(0, totalPersonDaysRemaining - vacantPersonDays);
+    const vacationLossPct = totalPersonDaysRemaining ? round(vacantPersonDays / totalPersonDaysRemaining * 100, 1) : 0;
+
+    const dailyCompletedRate = completedSoFar / daysElapsed; // por dia útil do time
+    const dailyQuotaRate = quotaSoFar / daysElapsed;
+    const perPersonDayCompleted = headcount ? dailyCompletedRate / headcount : 0;
+    const perPersonDayQuota = headcount ? dailyQuotaRate / headcount : 0;
+
+    const projectedRemainingCompleted = perPersonDayCompleted * activePersonDaysRemaining;
+    const projectedRemainingQuota = perPersonDayQuota * activePersonDaysRemaining;
+    const projectedCompleted = completedSoFar + projectedRemainingCompleted;
+    const projectedQuota = quotaSoFar + projectedRemainingQuota;
+    const projectedPct = projectedQuota > 0 ? round(projectedCompleted / projectedQuota * 100) : null;
+    const currentPct = quotaSoFar > 0 ? round(completedSoFar / quotaSoFar * 100) : null;
+
+    const gapToTarget = projectedQuota - completedSoFar;
+    const neededDailyRate = daysRemaining > 0 ? round(gapToTarget / daysRemaining, 1) : null;
+    const currentDailyRate = round(dailyCompletedRate, 1);
+
+    res.json({
+      hasData: true, monthKey, todayStr, monthEndStr, headcount, daysElapsed, daysRemaining,
+      completedSoFar: round(completedSoFar, 1), quotaSoFar: round(quotaSoFar, 1), currentPct,
+      projectedCompleted: round(projectedCompleted, 1), projectedQuota: round(projectedQuota, 1), projectedPct,
+      vacationLossPct, vacantPersonDays, currentDailyRate, neededDailyRate,
+      onTrack: projectedPct != null && projectedPct >= 100,
+    });
+  } catch (e) {
+    console.error("[indicators/runrate]", e.message);
+    res.status(500).json({ error: "Falha ao calcular a projeção" });
+  }
+});
+
 module.exports = router;

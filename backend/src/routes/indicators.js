@@ -847,9 +847,11 @@ router.get("/qc-reasons", requireAuth, (req, res) => {
     if (group) { parts.push("group_no = ?"); params.push(group); }
     const clause = parts.length ? " AND " + parts.join(" AND ") : "";
 
+    // Minitrim excluído: volume insignificante no BR (transferido de outros
+    // centros — não é trabalho gerado localmente, não vale como tendência).
     const rows = d.prepare(`
       SELECT order_type, SUM(inspections) insp, SUM(passed) passed
-      FROM qc_reason WHERE snapshot_date LIKE ?${clause}
+      FROM qc_reason WHERE snapshot_date LIKE ? AND order_type != 'MINITRIM_DESIGN'${clause}
       GROUP BY order_type ORDER BY insp DESC
     `).all(monthKey + "-%", ...params);
 
@@ -864,7 +866,7 @@ router.get("/qc-reasons", requireAuth, (req, res) => {
     // Designers com mais reprovações no mês (para o líder priorizar quem conversar)
     const worstDesigners = d.prepare(`
       SELECT designer_name name, SUM(inspections) insp, SUM(passed) passed
-      FROM qc_reason WHERE snapshot_date LIKE ?${clause}
+      FROM qc_reason WHERE snapshot_date LIKE ? AND order_type != 'MINITRIM_DESIGN'${clause}
       GROUP BY designer_name HAVING SUM(inspections) - SUM(passed) > 0
       ORDER BY (SUM(inspections) - SUM(passed)) DESC LIMIT 5
     `).all(monthKey + "-%", ...params).map(r => ({ name: r.name, inspections: r.insp, reproved: r.insp - r.passed, reprovalRate: round((r.insp - r.passed) / r.insp * 100, 1) }));

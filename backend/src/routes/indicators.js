@@ -793,4 +793,77 @@ router.get("/runrate", requireAuth, (req, res) => {
   }
 });
 
+const QC_REASON_LABEL = {
+  NEW_DESIGN: "Caso novo", RESCAN_DESIGN: "Rescan", MODIFY_DESIGN: "Modificação",
+  MINITRIM_DESIGN: "Minitrim", REPLACEMENT_DESIGN: "Substituição",
+};
+
+// GET /api/indicators/qc-reasons?group=X — drill-down do QC interno: quais
+// tipos de pedido concentram as reprovações do time este mês (escopo
+// líder/gestor, mesmo padrão de team-trend/runrate).
+router.get("/qc-reasons", requireAuth, (req, res) => {
+  const ss = getDb();
+  const me = ss.prepare("SELECT id, role FROM users WHERE id=?").get(req.user.id);
+  if (!me) return res.status(404).json({ error: "Usuário não encontrado" });
+  const GESTOR = new Set(["gerencia", "hr", "ti"]);
+  let memberNames = null;
+  if (!GESTOR.has(me.role)) {
+    const led = ss.prepare(`
+      SELECT g.id FROM groups g WHERE g.leader_id=?
+      UNION SELECT g.id FROM groups g JOIN group_co_leaders cl ON cl.group_id=g.id WHERE cl.user_id=?
+    `).all(req.user.id, req.user.id);
+    if (!led.length) return res.status(403).json({ error: "Sem visão de time" });
+    const ids = led.map(g => g.id), ph = ids.map(() => "?").join(",");
+    memberNames = ss.prepare(
+      `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id=gm.user_id
+       WHERE gm.group_id IN (${ph}) AND u.full_name IS NOT NULL AND u.full_name!=''`
+    ).all(...ids).map(r => r.fn);
+  }
+
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+  try {
+    const group = (req.query.group || "").trim() || null;
+    const monthKey = new Date().toISOString().slice(0, 7);
+
+    let scopeNames = null;
+    if (memberNames) {
+      const allDesig = d.prepare("SELECT DISTINCT designer_name name FROM qc_reason").all().map(r => r.name);
+      scopeNames = allDesig.filter(n => memberNames.some(mn => nameMatch(mn, n)));
+      if (!scopeNames.length) scopeNames = ["__none__"];
+    }
+    const parts = [], params = [];
+    if (scopeNames) { parts.push(`designer_name IN (${scopeNames.map(() => "?").join(",")})`); params.push(...scopeNames); }
+    if (group) { parts.push("group_no = ?"); params.push(group); }
+    const clause = parts.length ? " AND " + parts.join(" AND ") : "";
+
+    const rows = d.prepare(`
+      SELECT order_type, SUM(inspections) insp, SUM(passed) passed
+      FROM qc_reason WHERE snapshot_date LIKE ?${clause}
+      GROUP BY order_type ORDER BY insp DESC
+    `).all(monthKey + "-%", ...params);
+
+    const totalInsp = rows.reduce((s2, r) => s2 + r.insp, 0);
+    const reasons = rows.map(r => ({
+      orderType: r.order_type, label: QC_REASON_LABEL[r.order_type] || r.order_type,
+      inspections: r.insp, passed: r.passed, reproved: r.insp - r.passed,
+      reprovalRate: round((r.insp - r.passed) / r.insp * 100, 1),
+      shareOfTotal: totalInsp ? round(r.insp / totalInsp * 100, 1) : 0,
+    }));
+
+    // Designers com mais reprovações no mês (para o líder priorizar quem conversar)
+    const worstDesigners = d.prepare(`
+      SELECT designer_name name, SUM(inspections) insp, SUM(passed) passed
+      FROM qc_reason WHERE snapshot_date LIKE ?${clause}
+      GROUP BY designer_name HAVING SUM(inspections) - SUM(passed) > 0
+      ORDER BY (SUM(inspections) - SUM(passed)) DESC LIMIT 5
+    `).all(monthKey + "-%", ...params).map(r => ({ name: r.name, inspections: r.insp, reproved: r.insp - r.passed, reprovalRate: round((r.insp - r.passed) / r.insp * 100, 1) }));
+
+    res.json({ hasData: totalInsp > 0, monthKey, totalInspections: totalInsp, reasons, worstDesigners });
+  } catch (e) {
+    console.error("[indicators/qc-reasons]", e.message);
+    res.status(500).json({ error: "Falha ao calcular os motivos de reprovação" });
+  }
+});
+
 module.exports = router;

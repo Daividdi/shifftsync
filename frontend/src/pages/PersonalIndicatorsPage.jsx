@@ -138,6 +138,7 @@ export default function PersonalIndicatorsPage() {
   const [trend, setTrend] = useState(null);        // team-trend (evolução)
   const [teamGroup, setTeamGroup] = useState("ALL");
   const [runrate, setRunrate] = useState(null);
+  const [qcReasons, setQcReasons] = useState(null);
   const [teamGran, setTeamGran] = useState("month"); // month | week
   const [teamSort, setTeamSort] = useState({ k: "pct", dir: -1 });
   const [hovRow, setHovRow] = useState(null);
@@ -157,6 +158,7 @@ export default function PersonalIndicatorsPage() {
     if (mode !== "team") return;
     const g = teamGroup && teamGroup !== "ALL" ? `?group=${encodeURIComponent(teamGroup)}` : "";
     api.get(`/indicators/runrate${g}`).then(r => setRunrate(r.data)).catch(() => setRunrate(null));
+    api.get(`/indicators/qc-reasons${g}`).then(r => setQcReasons(r.data)).catch(() => setQcReasons(null));
   }, [mode, teamGroup]);
 
   useEffect(() => {
@@ -330,6 +332,40 @@ export default function PersonalIndicatorsPage() {
           </div>
         );
       })()}
+
+      {qcReasons && qcReasons.hasData && (
+        <div className="wf-in" style={{ animationDelay: "195ms", ...card, marginBottom: 14 }}>
+          <div style={h3}><span style={dot(T.purple)} />Motivos de reprovação do QC — {new Date().toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}<InfoTip text="Reprovações do mês (nota < 80) agrupadas pelo tipo do pedido, direto do warehouse. Ajuda a mirar o treinamento: se um tipo concentra as reprovações, o foco é ali." T={T} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 22 }}>
+            <div>
+              {qcReasons.reasons.filter(r => r.inspections > 0).map((r, i) => {
+                const maxRate = Math.max(...qcReasons.reasons.map(x => x.reprovalRate), 1);
+                const c2 = r.reprovalRate >= 30 ? T.red : r.reprovalRate >= 15 ? T.amber : T.green;
+                return (
+                  <div key={i} style={{ margin: "9px 0" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                      <span style={{ color: T.t2 }}>{r.label} <span style={{ color: T.t7 }}>({r.inspections} insp. · {r.shareOfTotal}% do total)</span></span>
+                      <b style={{ color: c2 }}>{r.reprovalRate}% reprovado</b>
+                    </div>
+                    <div style={{ height: 7, borderRadius: 99, background: T.t1 + "12", overflow: "hidden" }}>
+                      <i style={{ display: "block", height: "100%", width: `${r.reprovalRate / maxRate * 100}%`, background: `linear-gradient(90deg, ${c2}, ${c2}99)`, borderRadius: 99, transition: "width .3s ease" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: T.t7, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>Mais reprovações no mês</div>
+              {qcReasons.worstDesigners.length ? qcReasons.worstDesigners.map((p, i) => (
+                <div key={i} onClick={() => openPerson(p.name)} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, padding: "5px 0", cursor: "pointer", color: T.t2, borderBottom: i < qcReasons.worstDesigners.length - 1 ? `1px solid ${T.border}` : "none" }}>
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  <b style={{ color: T.red, whiteSpace: "nowrap" }}>{p.reproved} de {p.inspections}</b>
+                </div>
+              )) : <div style={{ fontSize: 12, color: T.t6 }}>—</div>}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="wf-in" style={{ animationDelay: "210ms", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}><div style={h3}><span style={dot(T.accent)} />Evolução — atingimento ({teamGran === "month" ? "mês" : "semana"})</div>{prodSeries.length ? <BarChart data={prodSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>

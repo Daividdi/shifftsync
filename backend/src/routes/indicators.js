@@ -3,6 +3,7 @@ const router = express.Router();
 const Database = require("better-sqlite3");
 const { requireAuth } = require("../middleware/auth");
 const { getDb } = require("../db/init");
+const { v4: uuidv4 } = require("uuid");
 
 // Read-only handle to the BI database (mounted from the shiftsync-bi volume).
 const BI_PATH = process.env.BI_DB_PATH || "/bi-data/bi.db";
@@ -17,6 +18,7 @@ function bi() {
 }
 
 const round = (v, d = 0) => (v == null ? null : Number(v.toFixed(d)));
+const MIN_QUOTA = 5; // abaixo disso, quota residual (revisores QC) — sem meta de produção real
 
 const PTM = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 function prevMonthStr(mo) {
@@ -70,6 +72,31 @@ function trendOf(arr) {
   const t = v.slice(-k).reduce((a, b) => a + b, 0) / k;
   const df = t - h;
   return Math.abs(df) < (Math.abs(h) * 0.02 + 0.05) ? "flat" : df > 0 ? "up" : "down";
+}
+
+// Radar de sinais precoces — sinaliza SÓ produção/qualidade/QC (nunca ponto,
+// para não misturar assiduidade com performance). red = precisa de ação
+// imediata; amber = observar. Retorna null quando não há sinal.
+function computeRisk({ pct, prodTrend, score, qTrend, qcRate, qcTrend, lowRatePct }) {
+  const reasons = [];
+  let level = null;
+  if (pct != null && pct < 80) {
+    if (prodTrend === "down") { reasons.push(`Produção em queda e abaixo da meta (${pct}% da meta)`); level = "red"; }
+    else { reasons.push(`Produção abaixo da meta (${pct}% da meta)`); if (level !== "red") level = "amber"; }
+  }
+  if (qcRate != null) {
+    if (qcRate < 65) { reasons.push(`QC baixo (${qcRate}% de aprovação)`); level = "red"; }
+    else if (qcRate < 80 && qcTrend === "down") { reasons.push(`QC em queda (${qcRate}% de aprovação)`); if (level !== "red") level = "amber"; }
+  }
+  if (score != null && score < 8.3 && qTrend === "down") {
+    reasons.push(`Qualidade em queda (nota ${score})`);
+    if (level !== "red") level = "amber";
+  }
+  if (lowRatePct != null && lowRatePct >= 15) {
+    reasons.push(`Notas baixas acima do limite (${lowRatePct}%)`);
+    if (level !== "red") level = "amber";
+  }
+  return reasons.length ? { level, reasons } : null;
 }
 
 // Build the full personal-indicators bundle for one designer (used by /me and
@@ -393,11 +420,11 @@ router.get("/overview", requireAuth, (req, res) => {
       const a = d.prepare(
         `SELECT SUM(completed) c, SUM(quota) q, SUM(new_case_count+mod_count+refinement_count) cases FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
       ).get(x.name, ...rangeMonths);
-      const pct = a && a.q > 0 ? a.c / a.q * 100 : null;
+      const pct = a && a.q >= MIN_QUOTA ? a.c / a.q * 100 : null;
       const ap = prevRangeMonths.length ? d.prepare(
         `SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${prevRangeMonths.map(() => "?").join(",")}) AND quota>0`
       ).get(x.name, ...prevRangeMonths) : null;
-      const apPct = ap && ap.q > 0 ? ap.c / ap.q * 100 : null;
+      const apPct = ap && ap.q >= MIN_QUOTA ? ap.c / ap.q * 100 : null;
       const q = d.prepare(
         `SELECT AVG(avg_score) score, SUM(score_qty) qty FROM quality_designer WHERE designer_name=? AND period_type='month' AND substr(snapshot_date,1,7) IN (${mph})`
       ).get(x.name, ...rangeMonths);
@@ -414,16 +441,26 @@ router.get("/overview", requireAuth, (req, res) => {
       const kq = d.prepare(
         `SELECT SUM(inspections) insp, SUM(passed) passed, SUM(avg_score*inspections)/NULLIF(SUM(inspections),0) score FROM qc_designer WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${mph})`
       ).get(x.name, ...rangeMonths);
+      const kqPrev = prevRangeMonths.length ? d.prepare(
+        `SELECT SUM(inspections) insp, SUM(passed) passed FROM qc_designer WHERE designer_name=? AND substr(snapshot_date,1,7) IN (${prevRangeMonths.map(() => "?").join(",")})`
+      ).get(x.name, ...prevRangeMonths) : null;
+      const qcRateVal = kq && kq.insp ? round(kq.passed / kq.insp * 100, 1) : null;
+      const qcRatePrev = kqPrev && kqPrev.insp ? kqPrev.passed / kqPrev.insp * 100 : null;
+      const qcTrend = qcRateVal != null && qcRatePrev != null
+        ? (qcRateVal - qcRatePrev > 2 ? "up" : qcRateVal - qcRatePrev < -2 ? "down" : "flat") : "flat";
       const rm = rankMap(x.grp);
+      const pctR = round(pct), scoreR = q && q.score != null ? round(q.score, 2) : null;
+      const lowRatePctR = lqty ? Number((low / lqty * 100).toFixed(1)) : 0;
+      const pTrend = trendOf(dseries), qTrendR = trendOf(qseries);
       return {
         name: x.name, grp: x.grp, lvl: x.lvl,
-        qcRate: kq && kq.insp ? round(kq.passed / kq.insp * 100, 1) : null,
-        qcScore: kq && kq.insp ? round(kq.score, 1) : null, qcInsp: kq ? (kq.insp || 0) : 0,
-        pct: round(pct), deltaPct: pct != null && apPct != null ? round(pct - apPct) : null,
+        qcRate: qcRateVal, qcScore: kq && kq.insp ? round(kq.score, 1) : null, qcInsp: kq ? (kq.insp || 0) : 0, qcTrend,
+        pct: pctR, deltaPct: pct != null && apPct != null ? round(pct - apPct) : null,
         rank: rm.map[x.name] || null, groupSize: rm.size,
-        score: q && q.score != null ? round(q.score, 2) : null, qty: q ? q.qty : 0,
-        lowRatePct: lqty ? Number((low / lqty * 100).toFixed(1)) : 0, lowTotal: low,
-        cases: a.cases || 0, prodTrend: trendOf(dseries), qTrend: trendOf(qseries),
+        score: scoreR, qty: q ? q.qty : 0,
+        lowRatePct: lowRatePctR, lowTotal: low,
+        cases: a.cases || 0, prodTrend: pTrend, qTrend: qTrendR,
+        risk: computeRisk({ pct: pctR, prodTrend: pTrend, score: scoreR, qTrend: qTrendR, qcRate: qcRateVal, qcTrend, lowRatePct: lowRatePctR }),
       };
     });
 
@@ -512,6 +549,120 @@ router.get("/data-status", requireAuth, (req, res) => {
     { key: "quality_month", label: "Qualidade (mês)", cadence: "monthly", auto: true, ...one("SELECT MAX(snapshot_date) last FROM quality_designer WHERE period_type='month'") },
     { key: "qc", label: "QC interno", cadence: "daily", auto: true, ...one("SELECT MAX(snapshot_date) last FROM qc_designer") },
   ]);
+});
+
+// POST /api/indicators/internal/monday-digest — disparado por cron (segunda
+// 08:00 BRT). Para cada líder/co-líder, calcula o fechamento da semana
+// anterior (segunda-domingo) do seu time e envia uma notificação pessoal:
+// atingimento e qualidade da semana, maiores avanços/quedas e o radar de
+// risco (produção/qualidade/QC — nunca ponto, ver computeRisk).
+router.post("/internal/monday-digest", (req, res) => {
+  const SECRET = process.env.BI_NOTIFY_SECRET;
+  if (!SECRET || req.headers["x-internal-secret"] !== SECRET) return res.status(401).json({ error: "Unauthorized" });
+
+  const ss = getDb();
+  let d;
+  try { d = bi(); } catch (e) { return res.status(503).json({ error: "Base do BI indisponível" }); }
+
+  try {
+    // Semana fechada: se hoje é segunda, é a semana anterior (seg→dom).
+    const today = new Date();
+    const dow = today.getDay();
+    const backToMon = dow === 0 ? 6 : dow - 1; // dias até a última segunda (hoje incluso se for segunda)
+    const thisMon = new Date(today); thisMon.setDate(today.getDate() - backToMon);
+    const weekEnd = new Date(thisMon); weekEnd.setDate(thisMon.getDate() - 1); // domingo anterior
+    const weekStart = new Date(weekEnd); weekStart.setDate(weekEnd.getDate() - 6);
+    const prevWeekEnd = new Date(weekStart); prevWeekEnd.setDate(weekStart.getDate() - 1);
+    const prevWeekStart = new Date(prevWeekEnd); prevWeekStart.setDate(prevWeekEnd.getDate() - 6);
+    const iso = (dt) => dt.toISOString().slice(0, 10);
+    const [wS, wE, pwS, pwE] = [iso(weekStart), iso(weekEnd), iso(prevWeekStart), iso(prevWeekEnd)];
+    const dm = (ds) => ds.slice(8, 10) + "/" + ds.slice(5, 7);
+    const weekLabel = `${dm(wS)}–${dm(wE)}`;
+    const curMonth = wE.slice(0, 7), prevMonth = prevMonthStr(curMonth);
+
+    // Todos os líderes/co-líderes ativos
+    const leaders = ss.prepare(`
+      SELECT DISTINCT u.id, u.full_name FROM users u WHERE u.active=1 AND (
+        EXISTS (SELECT 1 FROM groups g WHERE g.leader_id=u.id) OR
+        EXISTS (SELECT 1 FROM group_co_leaders cl WHERE cl.user_id=u.id)
+      )`).all();
+
+    const allDesig = d.prepare("SELECT DISTINCT designer_name name FROM productivity").all().map(r => r.name);
+    let sent = 0, skipped = 0;
+
+    for (const leader of leaders) {
+      const led = ss.prepare(`
+        SELECT g.id, g.name FROM groups g WHERE g.leader_id=?
+        UNION SELECT g.id, g.name FROM groups g JOIN group_co_leaders cl ON cl.group_id=g.id WHERE cl.user_id=?
+      `).all(leader.id, leader.id);
+      if (!led.length) continue;
+      const gph = led.map(() => "?").join(",");
+      const memberNames = ss.prepare(
+        `SELECT DISTINCT u.full_name fn FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id IN (${gph}) AND u.full_name IS NOT NULL AND u.full_name!=''`
+      ).all(...led.map(g => g.id)).map(r => r.fn);
+      const scopeNames = allDesig.filter(n => memberNames.some(mn => nameMatch(mn, n)));
+      if (!scopeNames.length) { skipped++; continue; }
+      const sph = scopeNames.map(() => "?").join(",");
+
+      const weekSum = d.prepare(`SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name IN (${sph}) AND snapshot_date>=? AND snapshot_date<=? AND quota>0`).get(...scopeNames, wS, wE);
+      const teamPct = weekSum && weekSum.q > 0 ? round(weekSum.c / weekSum.q * 100) : null;
+      const qRow = d.prepare(`SELECT AVG(avg_score) s, SUM(score_qty) qty FROM quality_designer WHERE designer_name IN (${sph}) AND period_type='week' AND snapshot_date=?`).get(...scopeNames, wE);
+      const teamScore = qRow && qRow.s != null ? round(qRow.s, 2) : null;
+
+      // Delta por pessoa (semana atual vs anterior) + risco (base mensal)
+      const perPerson = scopeNames.map(name => {
+        const cur = d.prepare(`SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date>=? AND snapshot_date<=? AND quota>0`).get(name, wS, wE);
+        const prev = d.prepare(`SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date>=? AND snapshot_date<=? AND quota>0`).get(name, pwS, pwE);
+        // Piso de quota: abaixo de MIN_QUOTA a razão completed/quota é ruído
+        // (revisores QC com quota residual) — sem meta de produção real.
+        const pct = cur && cur.q >= MIN_QUOTA ? cur.c / cur.q * 100 : null;
+        const prevPct = prev && prev.q >= MIN_QUOTA ? prev.c / prev.q * 100 : null;
+        return { name, delta: pct != null && prevPct != null ? round(pct - prevPct) : null };
+      }).filter(p => p.delta != null);
+      const gains = perPerson.filter(p => p.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 2);
+      const drops = perPerson.filter(p => p.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 2);
+
+      const riskList = [];
+      for (const name of scopeNames) {
+        const cur = d.prepare("SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0").get(name, curMonth + "-%");
+        const prev = d.prepare("SELECT SUM(completed) c, SUM(quota) q FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0").get(name, prevMonth + "-%");
+        const dseries = d.prepare("SELECT ROUND(progress*100) p FROM productivity WHERE designer_name=? AND snapshot_date LIKE ? AND quota>0 ORDER BY snapshot_date").all(name, curMonth + "-%").map(r => r.p);
+        const pct = cur && cur.q >= MIN_QUOTA ? round(cur.c / cur.q * 100) : null;
+        const q = d.prepare("SELECT AVG(avg_score) score FROM quality_designer WHERE designer_name=? AND period_type='month' AND snapshot_date LIKE ?").get(name, curMonth + "-%");
+        const qseries = d.prepare("SELECT avg_score s FROM quality_designer WHERE designer_name=? AND period_type='week' ORDER BY snapshot_date DESC LIMIT 12").all(name).reverse().map(r => r.s);
+        const lowRows = d.prepare("SELECT COALESCE(qty_low_score,0) low, COALESCE(score_qty,0) qty FROM quality_designer WHERE designer_name=? AND period_type='week' AND snapshot_date LIKE ?").all(name, curMonth + "-%");
+        const low = lowRows.reduce((s2, r) => s2 + r.low, 0), lqty = lowRows.reduce((s2, r) => s2 + r.qty, 0);
+        const kqCur = d.prepare("SELECT SUM(inspections) insp, SUM(passed) passed FROM qc_designer WHERE designer_name=? AND snapshot_date LIKE ?").get(name, curMonth + "-%");
+        const kqPrev = d.prepare("SELECT SUM(inspections) insp, SUM(passed) passed FROM qc_designer WHERE designer_name=? AND snapshot_date LIKE ?").get(name, prevMonth + "-%");
+        const qcRate = kqCur && kqCur.insp ? round(kqCur.passed / kqCur.insp * 100, 1) : null;
+        const qcRatePrev = kqPrev && kqPrev.insp ? kqPrev.passed / kqPrev.insp * 100 : null;
+        const qcTrend = qcRate != null && qcRatePrev != null ? (qcRate - qcRatePrev > 2 ? "up" : qcRate - qcRatePrev < -2 ? "down" : "flat") : "flat";
+        const risk = computeRisk({
+          pct, prodTrend: trendOf(dseries), score: q && q.score != null ? round(q.score, 2) : null,
+          qTrend: trendOf(qseries), qcRate, qcTrend, lowRatePct: lqty ? Number((low / lqty * 100).toFixed(1)) : 0,
+        });
+        if (risk) riskList.push({ name, ...risk });
+      }
+      riskList.sort((a, b) => (a.level === "red" ? 0 : 1) - (b.level === "red" ? 0 : 1));
+
+      const lines = [];
+      lines.push(`Semana ${weekLabel}: ${teamPct != null ? teamPct + "% da meta" : "sem produção"}${teamScore != null ? ` · qualidade ${teamScore}` : ""}.`);
+      if (gains.length) lines.push(`▲ Avançaram: ${gains.map(g => `${g.name} (+${g.delta}p.p.)`).join(", ")}.`);
+      if (drops.length) lines.push(`▼ Caíram: ${drops.map(g => `${g.name} (${g.delta}p.p.)`).join(", ")}.`);
+      if (riskList.length) lines.push(`⚠️ Atenção (${riskList.length}): ${riskList.slice(0, 4).map(r => `${r.name} — ${r.reasons[0]}`).join(" | ")}${riskList.length > 4 ? "…" : ""}`);
+      else lines.push("Nenhum ponto de atenção esta semana.");
+
+      const title = `📅 Resumo da semana — ${led.map(g => g.name).join(", ")}`;
+      ss.prepare("INSERT INTO notifications (id, user_id, type, title, body) VALUES (?,?,?,?,?)")
+        .run(uuidv4(), leader.id, "monday_digest", title, lines.join("\n"));
+      sent++;
+    }
+
+    return res.json({ ok: true, sent, skipped, week: weekLabel });
+  } catch (e) {
+    console.error("[indicators/internal/monday-digest]", e.message);
+    return res.status(500).json({ error: "Falha ao gerar o digest" });
+  }
 });
 
 module.exports = router;

@@ -268,6 +268,29 @@ export default function PersonalIndicatorsPage() {
         </div>
       </div>
 
+      {(() => {
+        const risky = rows.filter(p => p.risk).sort((a, b) => (a.risk.level === "red" ? 0 : 1) - (b.risk.level === "red" ? 0 : 1));
+        if (!risky.length) return null;
+        return (
+          <div className="wf-in" style={{ animationDelay: "175ms", ...card, marginBottom: 14, borderLeft: `3px solid ${T.red}` }}>
+            <div style={h3}><span style={dot(T.red)} />Radar de atenção<InfoTip text="Sinaliza produção, qualidade e QC em queda ou abaixo da meta — nunca ponto/assiduidade. Vermelho = age agora; âmbar = observar. Baseado no mês corrente." T={T} /></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+              {risky.slice(0, 8).map((p, i) => (
+                <div key={i} onClick={() => openPerson(p.name)} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", borderRadius: 9, cursor: "pointer", background: p.risk.level === "red" ? T.red + "0e" : T.amber + "0c" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", marginTop: 5, flexShrink: 0, background: p.risk.level === "red" ? T.red : T.amber }} />
+                  <div style={{ minWidth: 0 }}>
+                    <b style={{ fontSize: 12.5, color: T.t1 }}>{p.name}</b>
+                    <span style={{ fontSize: 11, color: T.t7, marginLeft: 6 }}>{grpShort(p.grp)}</span>
+                    <div style={{ fontSize: 11.5, color: T.t3, marginTop: 2 }}>{p.risk.reasons.join(" · ")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {risky.length > 8 && <div style={{ fontSize: 11, color: T.t6, marginTop: 8 }}>+{risky.length - 8} outro(s) colaborador(es) com sinais de atenção.</div>}
+          </div>
+        );
+      })()}
+
       <div className="wf-in" style={{ animationDelay: "210ms", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         <div style={card}><div style={h3}><span style={dot(T.accent)} />Evolução — atingimento ({teamGran === "month" ? "mês" : "semana"})</div>{prodSeries.length ? <BarChart data={prodSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>
         <div style={card}><div style={h3}><span style={dot(T.amber)} />Evolução — qualidade ({teamGran === "month" ? "mês" : "semana"})</div>{qualSeries.length ? <LineChart data={qualSeries} T={T} /> : <div style={{ color: T.t6, fontSize: 12, padding: "40px 0", textAlign: "center" }}>sem dados</div>}</div>

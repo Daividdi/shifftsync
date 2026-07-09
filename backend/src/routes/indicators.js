@@ -159,7 +159,10 @@ function buildPersonBundle(d, inputName) {
     const alt = d.prepare("SELECT DISTINCT designer_name n FROM productivity").all().map(r => r.n).find(n => nameMatch(name, n));
     if (alt) name = alt;
   }
-  const idn = d.prepare("SELECT group_no, job_level FROM productivity WHERE designer_name=? ORDER BY snapshot_date DESC LIMIT 1").get(name);
+  // Alguns dias o feed grava o designer com o grupo genérico "BR-ATD" em vez
+  // do time real (artefato do warehouse) — prefere qualquer grupo específico
+  // (BR-ATD-BRx etc.), com o mais recente como desempate.
+  const idn = d.prepare("SELECT group_no, job_level FROM productivity WHERE designer_name=? ORDER BY (group_no='BR-ATD') ASC, snapshot_date DESC LIMIT 1").get(name);
   if (!idn) return qualityOnlyBundle(d, inputName);   // no productivity → try a quality-only panel (e.g. QC reviewers)
   const group = idn.group_no;
   const months = d.prepare("SELECT substr(snapshot_date,1,7) m FROM productivity WHERE designer_name=? AND quota>0 GROUP BY m HAVING SUM(completed) > 0 ORDER BY m").all(name).map(r => r.m);
@@ -396,9 +399,16 @@ router.get("/overview", requireAuth, (req, res) => {
       : PTM[+rangeMonths[rangeMonths.length - 1].slice(5, 7) - 1] + "–" + PTM[+latest.slice(5, 7) - 1] + "/" + latest.slice(0, 4);
 
     // Roster do range + revisores só-qualidade (Basic QC etc.)
-    const prodDesigs = d.prepare(
-      `SELECT DISTINCT designer_name name, group_no grp, job_level lvl FROM productivity WHERE substr(snapshot_date,1,7) IN (${mph}) AND quota>0`
-    ).all(...rangeMonths);
+    // Dedup por designer: quando o feed grava dias com o grupo genérico
+    // "BR-ATD" além do time real, a mesma pessoa não pode aparecer 2x no
+    // ranking — 1 linha por designer, preferindo grupo específico.
+    const prodDesigs = d.prepare(`
+      SELECT name, grp, lvl FROM (
+        SELECT designer_name name, group_no grp, job_level lvl,
+          ROW_NUMBER() OVER (PARTITION BY designer_name ORDER BY (group_no='BR-ATD') ASC, snapshot_date DESC) rn
+        FROM productivity WHERE substr(snapshot_date,1,7) IN (${mph}) AND quota>0
+      ) WHERE rn = 1
+    `).all(...rangeMonths);
     const prodNamesSet = new Set(prodDesigs.map(r => r.name));
     const qonlyDesigs = d.prepare(
       `SELECT DISTINCT designer_name name, group_no grp, position lvl FROM quality_designer WHERE period_type='month' AND substr(snapshot_date,1,7) IN (${mph}) AND designer_name NOT IN (SELECT DISTINCT designer_name FROM productivity)`

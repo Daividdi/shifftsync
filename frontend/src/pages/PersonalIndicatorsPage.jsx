@@ -396,8 +396,8 @@ export default function PersonalIndicatorsPage() {
               ))}
             </tr></thead>
             <tbody>
-              {sorted.map(p => { const warn = p.pct < 80 || p.lowRatePct >= 15; return (
-                <tr key={p.name} onClick={() => openPerson(p.name)}
+              {sorted.map((p, pi) => { const warn = p.pct < 80 || p.lowRatePct >= 15; return (
+                <tr key={p.name + "|" + pi} onClick={() => openPerson(p.name)}
                   onMouseEnter={() => setHovRow(p.name)} onMouseLeave={() => setHovRow(null)}
                   style={{ cursor: "pointer", background: hovRow === p.name ? T.accent + "14" : warn ? T.red + "0c" : "transparent", borderBottom: `1px solid ${T.borderRow || T.border}`, transition: "background .12s ease" }}>
                   <td style={{ padding: "10px 14px", fontWeight: 700, color: hovRow === p.name ? T.accent : T.t1, whiteSpace: "nowrap", transition: "color .12s ease" }}>

@@ -196,7 +196,10 @@ export default function PersonalIndicatorsPage() {
     const n = rows.length, mAtt = avg(p => p.pct), mQ = avg(p => p.score), acima = rows.filter(p => p.pct >= 100).length, aten = rows.filter(p => p.pct < 80 || p.lowRatePct >= 15).length;
     const prodSeries = (teamGran === "month" ? trend?.monthly?.prod : trend?.weekly?.prod) || [];
     const qualSeries = (teamGran === "month" ? trend?.monthly?.qual : trend?.weekly?.qual) || [];
-    const sortKey = (k) => setTeamSort(s => s.k === k ? { k, dir: -s.dir } : { k, dir: (k === "name" || k === "grp") ? 1 : -1 });
+    // "rank" (posição): menor é melhor, então o 1o clique deve mostrar o
+    // 1o lugar no topo (dir=1, ascendente) — como nome/equipe, ao contrário
+    // das métricas onde maior é melhor (pct/score/qc), que abrem dir=-1.
+    const sortKey = (k) => setTeamSort(s => s.k === k ? { k, dir: -s.dir } : { k, dir: (k === "name" || k === "grp" || k === "rank") ? 1 : -1 });
     const tP = last(trend?.monthly?.prod)?.[1], cP = last(trend?.monthly?.companyProd)?.[1];
     const tQ = last(trend?.monthly?.qual)?.[1], cQ = last(trend?.monthly?.companyQual)?.[1];
     const withDelta = rows.filter(p => p.deltaPct != null);

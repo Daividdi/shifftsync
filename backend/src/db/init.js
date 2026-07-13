@@ -211,7 +211,75 @@ function initSchema() {
       uploaded_by TEXT REFERENCES users(id),
       created_at TEXT NOT NULL DEFAULT (datetime(now))
     );
+
+    -- KPI Dentistas: scorecard trimestral ponderado (produtividade + qualidade),
+    -- preenchido manualmente pelos gestores por período.
+    CREATE TABLE IF NOT EXISTS kpi_dentistas_definitions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,              -- 'produtividade' | 'qualidade'
+      weight REAL NOT NULL,                -- pontos percentuais, soma = 100
+      target_value REAL,                   -- NULL = meta ainda não definida
+      target_label TEXT NOT NULL,          -- texto de exibição da meta
+      unit TEXT NOT NULL DEFAULT '',
+      higher_better INTEGER NOT NULL DEFAULT 1,
+      qualitative INTEGER NOT NULL DEFAULT 0,  -- 1 = só nota, não entra no score
+      sort_order INTEGER NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS kpi_dentistas_entries (
+      id TEXT PRIMARY KEY,
+      definition_id TEXT NOT NULL REFERENCES kpi_dentistas_definitions(id),
+      dentist_id TEXT NOT NULL REFERENCES users(id),   -- o dentista avaliado (role='dentista')
+      period TEXT NOT NULL,                -- 'AAAA-MM'
+      value REAL,
+      note TEXT,
+      entered_by TEXT REFERENCES users(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(definition_id, dentist_id, period)
+    );
+    CREATE INDEX IF NOT EXISTS idx_kpid_entries_period ON kpi_dentistas_entries(period);
+    CREATE INDEX IF NOT EXISTS idx_kpid_entries_dentist ON kpi_dentistas_entries(dentist_id, period);
+
+    CREATE TABLE IF NOT EXISTS kpi_dentistas_feedback (
+      dentist_id TEXT NOT NULL REFERENCES users(id),
+      period TEXT NOT NULL,
+      comments TEXT,
+      updated_by TEXT REFERENCES users(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (dentist_id, period)
+    );
+
+    -- Marca quando um gestor finaliza o preenchimento do período (mensal).
+    -- Finalizar dispara a notificação de resultado para o role 'dentista'.
+    CREATE TABLE IF NOT EXISTS kpi_dentistas_periods (
+      period TEXT PRIMARY KEY,
+      finalized_by TEXT REFERENCES users(id),
+      finalized_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  seedKpiDentistasDefinitions(db);
+}
+
+// Semente das 8 métricas do quadro (pesos somam 100%). Idempotente — só
+// insere quem ainda não existe, nunca sobrescreve edições feitas depois.
+function seedKpiDentistasDefinitions(db) {
+  const defs = [
+    ["quota-rampup",     "Quota Ramp-Up",              "produtividade", 25, 100,  "100% da rampa",                     "%",    1, 0, 1],
+    ["feedback-score",   "Feedback Score",             "qualidade",     15, 8.2,  "> 8,2 (méd. VIP ano anterior)",     "nota", 1, 0, 2],
+    ["complaints",       "Reclamações",                "qualidade",     10, 0.02, "< 0,02%",                            "%",    0, 0, 3],
+    ["human-error",      "Erro Humano (nota baixa)",   "qualidade",     10, null, "meta a definir",                     "%",    0, 0, 4],
+    ["qc-random",        "QC Aleatório",                "qualidade",     10, 60,   "≥ 60%",                              "%",    1, 0, 5],
+    ["qc-basic",         "QC Básico",                   "qualidade",     10, 85,   "≥ 85%",                              "%",    1, 0, 6],
+    ["training",         "Treinamento",                 "qualidade",     10, 1,    "1 sessão/semana + protocolo",       "/sem", 1, 0, 7],
+    ["manager-feedback", "Feedback do Gestor",          "qualidade",     10, null, "hora extra · ausência · turnover",  "",     1, 1, 8],
+  ];
+  const ins = db.prepare(`INSERT OR IGNORE INTO kpi_dentistas_definitions
+    (id, name, category, weight, target_value, target_label, unit, higher_better, qualitative, sort_order)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  for (const d of defs) ins.run(...d);
 }
 
 module.exports = { getDb };

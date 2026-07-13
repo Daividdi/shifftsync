@@ -24,6 +24,7 @@ import FormsPage from "./pages/FormsPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import BIPage from "./pages/BIPage";
 import PersonalIndicatorsPage from "./pages/PersonalIndicatorsPage";
+import KpiDentistasPage from "./pages/KpiDentistasPage";
 import PlataformasPage from "./pages/PlataformasPage";
 import FocusGamePage from "./pages/FocusGamePage";
 import { GameTimerProvider } from "./context/GameTimerContext";
@@ -58,6 +59,7 @@ function AppContent() {
   if (!user) return <LoginPage/>;
 
   const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game","indicadores"]);
+  const DENTISTA_PAGES = new Set(["dashboard","kpi_dentistas"]);
 
   function openGame(url, title) {
     setFocusGame({ url, title });
@@ -66,7 +68,9 @@ function AppContent() {
 
   const renderPage = () => {
     const isEmployee = user?.role === "employee";
-    const safePage = isEmployee && !EMPLOYEE_PAGES.has(active) ? "calendar" : active;
+    const isDentista = user?.role === "dentista";
+    const safePage = isEmployee && !EMPLOYEE_PAGES.has(active) ? "calendar"
+      : isDentista && !DENTISTA_PAGES.has(active) ? "kpi_dentistas" : active;
     switch(safePage) {
       case "dashboard":   return <Dashboard/>;
       case "calendar":    return <CalendarPage/>;
@@ -89,6 +93,7 @@ function AppContent() {
       case "documents":   return <DocumentsPage/>;
       case "bi":          return <BIPage/>;
       case "indicadores": return <PersonalIndicatorsPage/>;
+      case "kpi_dentistas": return <KpiDentistasPage/>;
       case "plataformas": return <PlataformasPage onOpenGame={openGame}/>;
       case "focus-game":  return <FocusGamePage url={focusGame?.url} title={focusGame?.title} onBack={() => setActive("plataformas")}/>;
       default:            return <CalendarPage/>;

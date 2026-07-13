@@ -273,12 +273,12 @@ function seedKpiDentistasDefinitions(db) {
   const defs = [
     ["quota-rampup",     "Quota Ramp-Up",              "produtividade", 25, 100,  "100% da rampa",                     "%",    1, 0, 1],
     ["feedback-score",   "Feedback Score",             "qualidade",     15, 8.2,  "> 8,2 (méd. VIP ano anterior)",     "nota", 1, 0, 2],
-    ["complaints",       "Reclamações",                "qualidade",     10, 0.02, "< 0,02%",                            "%",    0, 0, 3],
-    ["human-error",      "Erro Humano (nota baixa)",   "qualidade",     10, null, "meta a definir",                     "%",    0, 0, 4],
-    ["qc-random",        "QC Aleatório",                "qualidade",     10, 60,   "≥ 60%",                              "%",    1, 0, 5],
+    ["complaints",       "Complaint",                  "qualidade",     10, 0.02, "< 0,02%",                            "%",    0, 0, 3],
+    ["human-error",      "Erro Humano (low score)",    "qualidade",     10, null, "meta a definir",                     "%",    0, 0, 4],
+    ["qc-random",        "QC Randômico",                "qualidade",     10, 60,   "≥ 60%",                              "%",    1, 0, 5],
     ["qc-basic",         "QC Básico",                   "qualidade",     10, 85,   "≥ 85%",                              "%",    1, 0, 6],
     ["training",         "Treinamento",                 "qualidade",     10, 1,    "1 sessão/semana + protocolo",       "/sem", 1, 0, 7],
-    ["manager-feedback", "Feedback do Gestor",          "qualidade",     10, null, "hora extra · ausência · turnover",  "",     1, 1, 8],
+    ["manager-feedback", "Feedback Gestor (Diretoria)",  "qualidade",     10, null, "hora extra · ausência · turnover",  "",     1, 1, 8],
   ];
   const ins = db.prepare(`INSERT OR IGNORE INTO kpi_dentistas_definitions
     (id, name, category, weight, target_value, target_label, unit, higher_better, qualitative, sort_order)

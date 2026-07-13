@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Stethoscope, Save, Check, PencilLine, Download, Lock, CheckCircle2 } from "lucide-react";
+import { Smile, Save, Check, PencilLine, Download, Lock, CheckCircle2 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from "../context/ThemeContext";
 import api from "../api/client";
@@ -43,13 +45,16 @@ function Ring({ pct, T, size = 128, stroke = 11 }) {
 }
 
 function Radar({ items, T }) {
-  const dims = items.filter(i => !i.qualitative && i.pct != null);
+  // Sempre os mesmos eixos (todo indicador não-qualitativo), mesmo sem valor
+  // ainda — senão o formato do radar muda a cada preenchimento, o que confunde
+  // mais do que ajuda. Pendente vira um ponto perto do centro, cor âmbar.
+  const dims = items.filter(i => !i.qualitative);
   const W = 380, H = 300, cx = 190, cy = 148, R = 108;
-  if (!dims.length) return <div style={{ textAlign: "center", color: T.t6, fontSize: 12, padding: "60px 0" }}>Sem dados suficientes ainda</div>;
+  if (!dims.length) return <div style={{ textAlign: "center", color: T.t6, fontSize: 12, padding: "60px 0" }}>Sem indicadores numéricos configurados</div>;
   const n = dims.length;
   const angle = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
   const pt = (i, frac) => [cx + Math.cos(angle(i)) * R * frac, cy + Math.sin(angle(i)) * R * frac];
-  const fracs = dims.map(k => Math.max(0.06, Math.min(1.3, k.pct / 100)));
+  const fracs = dims.map(k => k.pct != null ? Math.max(0.06, Math.min(1.3, k.pct / 100)) : 0.04);
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
       {[0.25, 0.5, 0.75, 1].map(f => (
@@ -142,19 +147,43 @@ export default function KpiDentistasPage() {
     finally { setFinalizing(false); }
   }
 
-  function downloadReport() {
-    const url = `${api.defaults.baseURL}/kpi-dentistas/report?from=${reportRange.from}&to=${reportRange.to}`;
-    const token = localStorage.getItem("shiftsync_token");
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.blob())
-      .then(blob => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `kpi_dentistas_${reportRange.from}_a_${reportRange.to}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
+  async function downloadReport() {
+    const { data: rows } = await api.get(`/kpi-dentistas/report?from=${reportRange.from}&to=${reportRange.to}&format=json`);
     setReportOpen(false);
+    if (!rows.length) { window.alert("Nenhum dado no intervalo selecionado."); return; }
+
+    const cols = Object.keys(rows[0]).filter(k => k !== "periodKey");
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth(), pageH = doc.internal.pageSize.getHeight();
+    const rangeLabel = reportRange.from === reportRange.to ? periodLabel(reportRange.from) : `${periodLabel(reportRange.from)} a ${periodLabel(reportRange.to)}`;
+
+    const drawHeader = () => {
+      doc.setFillColor(124, 58, 237); doc.rect(0, 0, pageW, 16, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
+      doc.text("KPI Dentistas — Relatório de Atingimento", 10, 10);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(230, 220, 250);
+      doc.text(`Período: ${rangeLabel}  ·  ${rows.length} registro${rows.length !== 1 ? "s" : ""}`, 10, 14.5);
+    };
+    const drawFooter = (p, total) => {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(140, 150, 165);
+      doc.text(`Página ${p} de ${total}`, pageW / 2, pageH - 6, { align: "center" });
+      doc.setFont("helvetica", "bold"); doc.setTextColor(124, 58, 237);
+      doc.text("ShiftSync · KPI Dentistas", pageW - 10, pageH - 6, { align: "right" });
+    };
+
+    drawHeader();
+    autoTable(doc, {
+      head: [cols],
+      body: rows.map(r => cols.map(c => (r[c] === "" || r[c] == null ? "—" : String(r[c])))),
+      startY: 20, margin: { left: 10, right: 10, bottom: 12 },
+      styles: { fontSize: 8, font: "helvetica", cellPadding: { top: 3, right: 4, bottom: 3, left: 4 }, lineColor: [222, 214, 245], lineWidth: 0.15, textColor: [35, 45, 60] },
+      headStyles: { fillColor: [30, 20, 55], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 8 },
+      alternateRowStyles: { fillColor: [248, 245, 253] },
+      didDrawPage: (hd) => { if (hd.pageNumber > 1) drawHeader(); },
+    });
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) { doc.setPage(p); drawFooter(p, totalPages); }
+    doc.save(`kpi_dentistas_${reportRange.from}_a_${reportRange.to}.pdf`);
   }
 
   const card = { background: `linear-gradient(165deg, ${T.bgCard}, ${T.bgDeep})`, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px 20px" };
@@ -248,7 +277,7 @@ export default function KpiDentistasPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 14 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
-            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.purple + "1f", color: T.purple, flexShrink: 0 }}><Stethoscope size={18} /></span>
+            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.purple + "1f", color: T.purple, flexShrink: 0 }}><Smile size={18} /></span>
             KPI · Dentistas
           </h1>
           <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>
@@ -281,7 +310,7 @@ export default function KpiDentistasPage() {
                       {periodOptions().slice().reverse().map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
-                  <button onClick={downloadReport} style={{ width: "100%", background: T.accent, color: "#04222b", border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Baixar CSV</button>
+                  <button onClick={downloadReport} style={{ width: "100%", background: T.accent, color: "#04222b", border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>Baixar PDF</button>
                 </div>
               )}
             </div>

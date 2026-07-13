@@ -136,7 +136,7 @@ router.get("/:id", requireAuth, (req, res) => {
 // PATCH /api/users/:id/role
 router.patch("/:id/role", requireAuth, requireRole("hr"), (req, res) => {
   const { role } = req.body;
-  if (!["hr", "ti", "leader", "gerencia", "employee"].includes(role)) {
+  if (!["hr", "ti", "leader", "gerencia", "employee", "dentista"].includes(role)) {
     return res.status(400).json({ error: "Role inválido" });
   }
   const db = getDb();

@@ -176,10 +176,15 @@ export default function GroupsManager() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: coLeaders.length > 0 ? 8 : 14, padding: "8px 10px", background: T.bgDeep, borderRadius: 8, border: `1px solid ${T.border}` }}>
                 <Star size={12} style={{ color: T.amber }} />
                 <Avatar name={leader?.fullName} size={22} color={T.amber} />
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: T.amber, fontWeight: 600 }}>{leader?.fullName || "Sem líder"}</div>
                   <div style={{ fontSize: 10, color: T.t9 }}>Líder do Time</div>
                 </div>
+                {leader?.isDentista && (
+                  <span title="Também responde pelo KPI Dentistas do grupo" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: T.purple, background: T.purple + "18", border: `1px solid ${T.purple}40`, borderRadius: 999, padding: "3px 8px", flexShrink: 0 }}>
+                    🦷 Dentista
+                  </span>
+                )}
               </div>
 
               {coLeaders.length > 0 && (

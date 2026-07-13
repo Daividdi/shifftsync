@@ -336,7 +336,7 @@ export default function Sidebar({ active, setActive }) {
             icon={<Cake size={15}/>} active={active} setActive={setActive} T={T} />
           <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
           <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} />
-          {(isHR || user?.role === "gerencia" || user?.role === "dentista") && (
+          {(isHR || user?.role === "gerencia" || user?.isDentista) && (
             <NavItem id="kpi_dentistas" label="KPI Dentistas" icon={<Stethoscope size={15} />} active={active} setActive={setActive} T={T} />
           )}
         </NavGroup>

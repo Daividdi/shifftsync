@@ -136,7 +136,7 @@ router.get("/:id", requireAuth, (req, res) => {
 // PATCH /api/users/:id/role
 router.patch("/:id/role", requireAuth, requireRole("hr"), (req, res) => {
   const { role } = req.body;
-  if (!["hr", "ti", "leader", "gerencia", "employee", "dentista"].includes(role)) {
+  if (!["hr", "ti", "leader", "gerencia", "employee"].includes(role)) {
     return res.status(400).json({ error: "Role inválido" });
   }
   const db = getDb();
@@ -254,6 +254,7 @@ function formatUser(u) {
     syncExempt: Boolean(u.sync_exempt),
     meioPeriodo: Boolean(u.meio_periodo),
     noSaturday: Boolean(u.no_saturday),
+    isDentista: Boolean(u.is_dentista),
   };
 }
 
@@ -270,6 +271,16 @@ router.patch('/:id/no-saturday', requireAuth, requireRole('hr','ti','gerencia'),
   const { nosaturday } = req.body;
   const db = getDb();
   db.prepare('UPDATE users SET no_saturday=? WHERE id=?').run(nosaturday ? 1 : 0, req.params.id);
+  return res.json({ ok: true });
+});
+
+// PATCH /api/users/:id/dentista — marca/desmarca a responsabilidade pelo KPI
+// Dentistas do grupo. É um FLAG adicional, não troca o role (o líder continua
+// líder, e passa a também enxergar/ser avaliado no KPI Dentistas).
+router.patch('/:id/dentista', requireAuth, requireRole('hr','ti','gerencia'), (req, res) => {
+  const { isDentista } = req.body;
+  const db = getDb();
+  db.prepare('UPDATE users SET is_dentista=? WHERE id=?').run(isDentista ? 1 : 0, req.params.id);
   return res.json({ ok: true });
 });
 

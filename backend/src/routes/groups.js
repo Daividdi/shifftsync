@@ -104,7 +104,7 @@ function enrichGroup(db, g) {
   `).all(g.id);
 
   const leader = g.leader_id
-    ? db.prepare("SELECT id, username, full_name FROM users WHERE id = ?").get(g.leader_id)
+    ? db.prepare("SELECT id, username, full_name, is_dentista FROM users WHERE id = ?").get(g.leader_id)
     : null;
 
   const coLeaders = db.prepare(`
@@ -122,7 +122,7 @@ function enrichGroup(db, g) {
     dept: g.dept,
     team: g.team || null,  // "A" | "B" | null
     leaderId: g.leader_id,
-    leader: leader ? { id: leader.id, username: leader.username, fullName: leader.full_name } : null,
+    leader: leader ? { id: leader.id, username: leader.username, fullName: leader.full_name, isDentista: Boolean(leader.is_dentista) } : null,
     coLeaderIds: coLeaders.map((u) => u.id),
     coLeaders: coLeaders.map((u) => ({ id: u.id, username: u.username, fullName: u.full_name })),
     memberIds: members.map((m) => m.id),

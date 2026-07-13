@@ -260,6 +260,10 @@ function initSchema() {
     );
   `);
 
+  // Migração idempotente: flag adicional (não substitui o role) para líderes
+  // que também respondem pelo KPI Dentistas do seu grupo.
+  try { db.exec("ALTER TABLE users ADD COLUMN is_dentista INTEGER NOT NULL DEFAULT 0"); } catch (e) {}
+
   seedKpiDentistasDefinitions(db);
 }
 

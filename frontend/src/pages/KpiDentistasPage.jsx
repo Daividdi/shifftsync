@@ -77,10 +77,11 @@ export default function KpiDentistasPage() {
   const readOnly = !isManager;
 
   const [roster, setRoster] = useState([]);
+  const [rosterLoading, setRosterLoading] = useState(true);
   const [dentistId, setDentistId] = useState(null);
   const [period, setPeriod] = useState(currentPeriod());
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [saving, setSaving] = useState({});
   const [savedFlash, setSavedFlash] = useState({});
@@ -94,11 +95,11 @@ export default function KpiDentistasPage() {
     api.get("/kpi-dentistas/roster").then(r => {
       setRoster(r.data || []);
       if (r.data?.length) setDentistId(prev => prev || r.data[0].id);
-    }).catch(() => setRoster([]));
+    }).catch(() => setRoster([])).finally(() => setRosterLoading(false));
   }, []);
 
   const load = useCallback(() => {
-    if (!dentistId) return;
+    if (!dentistId) { setData(null); return; }
     setLoading(true);
     api.get(`/kpi-dentistas?period=${period}&dentistId=${dentistId}`)
       .then(r => { setData(r.data); setFeedbackDraft(r.data.feedback?.comments || ""); setDrafts({}); })
@@ -174,7 +175,17 @@ export default function KpiDentistasPage() {
         </div>
         <div style={{ fontSize: 11.5, color: T.t6 }}>Meta: <b style={{ color: T.t4 }}>{item.targetLabel}</b></div>
 
-        {readOnly ? (
+        {item.auto ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: T.cyan, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              🔄 Automático · fonte BI
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: T.t1, fontFamily: "monospace" }}>{item.value != null ? `${fmt(item.value, item.unit === "%" ? 1 : 2)}${item.unit}` : "—"}</div>
+            <div style={{ height: 6, borderRadius: 3, background: T.t1 + "0f", overflow: "hidden" }}>
+              <i style={{ display: "block", height: "100%", width: `${item.pct != null ? Math.min(100, item.pct) : 0}%`, background: col, borderRadius: 3, transition: "width .4s ease" }} />
+            </div>
+          </>
+        ) : readOnly ? (
           item.qualitative ? (
             <div style={{ fontSize: 12, color: item.note ? T.t2 : T.t7, fontStyle: item.note ? "normal" : "italic", background: T.bgDeep, borderRadius: 8, padding: "8px 10px" }}>
               {item.note || "Sem nota registrada"}
@@ -217,9 +228,9 @@ export default function KpiDentistasPage() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 999, color: col, background: col + "20" }}>
-            {{ atingido: "Meta atingida", abaixo: "Abaixo da meta", registrado: "Registrado", pendente: "Pendente", meta_a_definir: "Meta a definir" }[item.status]}
+            {{ atingido: "Meta atingida", abaixo: "Abaixo da meta", registrado: "Registrado", pendente: "Pendente", meta_a_definir: "Meta a definir", sem_dados_bi: "Sem dados no BI" }[item.status]}
           </span>
-          {!readOnly && (
+          {!readOnly && !item.auto && (
             <button onClick={() => saveEntry(item)} disabled={!dirty || saving[item.id]}
               style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, padding: "5px 11px", borderRadius: 7, border: "none", cursor: dirty ? "pointer" : "default",
                 background: savedFlash[item.id] ? T.green + "22" : dirty ? T.purple : T.t1 + "0a", color: savedFlash[item.id] ? T.green : dirty ? "#fff" : T.t7 }}>
@@ -295,9 +306,9 @@ export default function KpiDentistasPage() {
         </div>
       )}
 
-      {loading && <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>Carregando…</div>}
+      {(rosterLoading || loading) && <div style={{ textAlign: "center", padding: "70px 0", color: T.t4 }}>Carregando…</div>}
 
-      {!loading && data && (
+      {!rosterLoading && !loading && data && (
         <>
           <div style={{ ...card, display: "flex", alignItems: "center", gap: 26, marginBottom: 16, flexWrap: "wrap" }}>
             <Ring pct={data.compositeScore} T={T} />
@@ -368,7 +379,7 @@ export default function KpiDentistasPage() {
         </>
       )}
 
-      {!loading && !roster.length && (
+      {!rosterLoading && !roster.length && (
         <div style={{ textAlign: "center", padding: "60px 20px", color: T.t4 }}>
           <div style={{ fontSize: 34, marginBottom: 10 }}>🦷</div>
           Nenhum dentista cadastrado ainda (role "dentista" em Usuários).

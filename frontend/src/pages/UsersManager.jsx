@@ -412,7 +412,6 @@ export default function UsersManager() {
                           { value: "leader",   label: "Líder" },
                           { value: "gerencia", label: "Gerência" },
                           { value: "hr",       label: "HR Admin" },
-                          { value: "dentista", label: "Dentista (KPI)" },
                         ]}
                         style={{ fontSize: 11, padding: "4px 8px" }}
                       />

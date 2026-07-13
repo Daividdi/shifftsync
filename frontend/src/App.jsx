@@ -58,8 +58,7 @@ function AppContent() {
 
   if (!user) return <LoginPage/>;
 
-  const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game","indicadores"]);
-  const DENTISTA_PAGES = new Set(["dashboard","kpi_dentistas"]);
+  const EMPLOYEE_PAGES = new Set(["dashboard","calendar","absences","meeting","holidays","birthdays","batidas","vacations","ponto","saldo_horas","mural","forms","documents","bi","plataformas","focus-game","indicadores","kpi_dentistas"]);
 
   function openGame(url, title) {
     setFocusGame({ url, title });
@@ -68,9 +67,7 @@ function AppContent() {
 
   const renderPage = () => {
     const isEmployee = user?.role === "employee";
-    const isDentista = user?.role === "dentista";
-    const safePage = isEmployee && !EMPLOYEE_PAGES.has(active) ? "calendar"
-      : isDentista && !DENTISTA_PAGES.has(active) ? "kpi_dentistas" : active;
+    const safePage = isEmployee && !EMPLOYEE_PAGES.has(active) ? "calendar" : active;
     switch(safePage) {
       case "dashboard":   return <Dashboard/>;
       case "calendar":    return <CalendarPage/>;

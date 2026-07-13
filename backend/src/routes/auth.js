@@ -70,7 +70,7 @@ router.get("/me", requireAuth, (req, res) => {
 router.post("/logout", (req, res) => res.json({ ok: true }));
 
 function fmt(u) {
-  return { id: u.id, username: u.username, fullName: u.full_name, email: u.email, dept: u.dept, title: u.title, role: u.role };
+  return { id: u.id, username: u.username, fullName: u.full_name, email: u.email, dept: u.dept, title: u.title, role: u.role, isDentista: Boolean(u.is_dentista) };
 }
 
 module.exports = router;

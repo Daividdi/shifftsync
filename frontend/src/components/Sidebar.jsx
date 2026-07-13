@@ -4,7 +4,7 @@ import {
   BarChart3, Clock, LogOut, GitBranch, Timer, Scale,
   ChevronDown, ChevronRight, DoorOpen, CalendarDays, FileText, Cake, Fingerprint, Umbrella,
   Newspaper, FolderOpen, TrendingUp, Zap, ClipboardList,
-  Sun, Moon, Check, ChevronLeft, Palette, Gauge, Users2, Smile,
+  Sun, Moon, Check, ChevronLeft, Palette, Gauge, Users2, Target,
 } from "lucide-react";
 import { Avatar } from "./UI";
 import { useAuth } from "../hooks/useAuth";
@@ -337,7 +337,7 @@ export default function Sidebar({ active, setActive }) {
           <NavItem id="bi" label="BI & Analytics" icon={<TrendingUp size={15} />} active={active} setActive={setActive} T={T} />
           <NavItem id="indicadores" label="Indicadores Pessoais" icon={<Gauge size={15} />} active={active} setActive={setActive} T={T} />
           {(isHR || user?.role === "gerencia" || user?.isDentista) && (
-            <NavItem id="kpi_dentistas" label="KPI Dentistas" icon={<Smile size={15} />} active={active} setActive={setActive} T={T} />
+            <NavItem id="kpi_dentistas" label="KPI Dentistas" icon={<Target size={15} />} active={active} setActive={setActive} T={T} />
           )}
         </NavGroup>
 

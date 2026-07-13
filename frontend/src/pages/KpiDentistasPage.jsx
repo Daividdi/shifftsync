@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Smile, Save, Check, PencilLine, Download, Lock, CheckCircle2 } from "lucide-react";
+import { Target, Save, Check, PencilLine, Download, Lock, CheckCircle2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useAuth } from "../hooks/useAuth";
@@ -277,7 +277,7 @@ export default function KpiDentistasPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap", gap: 14 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: T.t1, margin: 0, display: "flex", alignItems: "center", gap: 11 }}>
-            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.purple + "1f", color: T.purple, flexShrink: 0 }}><Smile size={18} /></span>
+            <span style={{ display: "inline-flex", width: 34, height: 34, borderRadius: 9, alignItems: "center", justifyContent: "center", background: T.purple + "1f", color: T.purple, flexShrink: 0 }}><Target size={18} /></span>
             KPI · Dentistas
           </h1>
           <p style={{ color: T.t8, fontSize: 13, margin: "5px 0 0" }}>
